@@ -26,6 +26,12 @@ public class SHPHeader implements Serializable {
         this.msgType = msgType;
     }
 
+    public SHPHeader(int version, int release, int msgType) {
+        setVersion(version);
+        setRelease(release);
+        this.msgType = (byte) msgType;
+    }
+
     public static SHPHeader generateFromPayload(byte[] payload) {
         byte versionRelease = 0x22;
         byte msgType = 'c';
