@@ -15,29 +15,24 @@ import java.net.*;
 class hjStreamServer {
 
     static public void main(String[] args) throws Exception {
-        if (args.length != 3) {
-            System.out.println(
-                "Use: hjStramSrver <movie> <ip-multicast-address> <port>");
-            System.out.println("Ex: hjStreamSrver  <movie> 224.2.2.2 9000");
-            System.out.println(
-                " or: hjStreamSrver  <movie> <ip-unicast-address> <port>");
-            System.out.println("Ex: hjStreamSrver  <movie> 127.0.0.1 10000");
-
-            System.exit(-1);
-        }
-
         SHPServer sc = new SHPServer();
-        sc.handshake();
+        String payload = sc.handshake();
+        String[] fields = payload.split("_");
+        String host = fields[0];
+        int port = Integer.parseInt(fields[1]);
+
+        // TODO something about this
+        String filename = "StreamingService/hjStreamServer/movies/" + fields[2];
         sc.destroy();
 
         int size;
         int count = 0;
         long time;
-        DataInputStream g = new DataInputStream(new FileInputStream(args[0]));
+        DataInputStream g = new DataInputStream(new FileInputStream(filename));
         byte[] buff = new byte[65000];
-        DSTPDatagramSocket s = new DSTPDatagramSocket(); // PA1: changed socket class
-        InetSocketAddress addr =
-            new InetSocketAddress(args[1], Integer.parseInt(args[2]));
+        DSTPDatagramSocket s =
+            new DSTPDatagramSocket(); // PA1: changed socket class
+        InetSocketAddress addr = new InetSocketAddress(host, port);
         DatagramPacket p = new DatagramPacket(buff, buff.length, addr);
         long t0 = System.nanoTime(); // tempo de referencia
         long q0 = 0;

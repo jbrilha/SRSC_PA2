@@ -2,7 +2,6 @@ package SHP;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
@@ -22,7 +21,6 @@ public class SHPServer {
         try {
             this.serverSock = new ServerSocket(port);
             this.sock = serverSock.accept();
-            System.out.println("inet: " + sock.getInetAddress());
             this.in = sock.getInputStream();
             this.out = sock.getOutputStream();
         } catch (Exception e) {
@@ -30,12 +28,19 @@ public class SHPServer {
         }
     }
 
-    public void handshake() {
+    public String handshake() {
         try {
-            ObjectOutputStream oos = new ObjectOutputStream(out);
-            oos.writeObject(new SHPHeader(0x1, 0x2, 0x3));
+            SHPHeader header = new SHPHeader(0x1, 0x2, 0x3);
+            out.write(header.toByteArray());
+
+            byte[] buf = new byte[1024];
+            int read = in.read(buf);
+            String bufString = new String(buf, 0, read);
+            System.out.println(bufString);
+            return bufString;
         } catch (IOException e) {
             e.printStackTrace();
+            return null;
         }
     }
 

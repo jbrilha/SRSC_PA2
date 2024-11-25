@@ -1,11 +1,17 @@
 #!/bin/bash
 
-sender_host="${1:-localhost}"
-sender_port="${2:-10000}"
+username="${1:-user1}"
+password="${2:-password1}"
 
-receiver_host="${1:-localhost}"
-receiver_port="${2:-9000}"
+host="${3:-localhost}"
+tcp_port="${4:-3333}"
 
-echo "Starting proxy passthrough from $sender_host:$sender_port to $receiver_host:$receiver_port"
+movie="${5:-monsters.dat}"
 
-java -cp .:../libs/bcprov-jdk18on-1.78.1.jar StreamingService.hjUDPproxy.hjUDPproxy $sender_host:$sender_port $receiver_host:$receiver_port
+server_endpoint="${6:-localhost:10000}"
+player_endpoint="${7:-localhost:9000}"
+
+echo "Starting proxy passthrough from $server_endpoint to $player_endpoint"
+
+./compile.sh 
+java -cp .:../libs/bcprov-jdk18on-1.78.1.jar StreamingService.hjUDPproxy.hjUDPproxy $username $password $host $tcp_port $movie $server_endpoint $player_endpoint

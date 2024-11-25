@@ -2,7 +2,6 @@ package SHP;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.ObjectInputStream;
 import java.io.OutputStream;
 import java.net.Socket;
 
@@ -21,7 +20,6 @@ public class SHPClient {
 
         try {
             this.sock = new Socket(host, port);
-            System.out.println("inet: " + sock.getInetAddress());
             this.in = sock.getInputStream();
             this.out = sock.getOutputStream();
         } catch (Exception e) {
@@ -29,15 +27,18 @@ public class SHPClient {
         }
     }
 
-    public void handshake() {
+    public void handshake(String username, String password, String filename, int port) {
         try {
-            ObjectInputStream ois = new ObjectInputStream(in);
-            SHPHeader ss = (SHPHeader) ois.readObject();
+            byte[] buf = new byte[1024];
+            in.read(buf);
+            SHPHeader ss = SHPHeader.getFromPacket(buf);
+
             System.out.println("\nSHPHeader: " + ss + "\n");
+
+            var payload = host + "_" + port + "_" + filename;
+            out.write(payload.getBytes());
         } catch (IOException e) {
             e.printStackTrace();
-        } catch (ClassNotFoundException e) {
-			e.printStackTrace();
 		}
     }
 

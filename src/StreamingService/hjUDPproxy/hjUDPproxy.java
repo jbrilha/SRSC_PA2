@@ -5,9 +5,6 @@ package StreamingService.hjUDPproxy; // PA1: added package declaration for easie
 
 import DSTP.DSTPDatagramSocket; // PA1: added import
 import SHP.*;
-
-import java.io.InputStream;
-import java.io.ObjectInputStream;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetSocketAddress;
@@ -19,29 +16,56 @@ import java.util.stream.Collectors;
 
 class hjUDPproxy {
     public static void main(String[] args) throws Exception {
-        if (args.length != 2) {
-            System.out.println("Use: hjUDPproxy <endpoint1> <endpoint2>");
-            System.out.println("<endpoint1>: endpoint for receiving stream");
-            System.out.println("<endpoint2>: endpoint of media player");
-
-            System.out.println("Ex: hjUDPproxy 224.2.2.2:9000  127.0.0.1:8888");
-            System.out.println("Ex: hjUDPproxy 127.0.0.1:10000 127.0.0.1:8888");
+        if (args.length != 7) {
+            showHelp();
             System.exit(0);
         }
 
-        SHPClient sc = new SHPClient();
-        sc.handshake();
+        String username = args[0];
+        String password = args[1];
+        String hostAddr = args[2];
+        int TCPPort = Integer.parseInt(args[3]);
+        String movie = args[4].contains(".dat")
+                ? args[4]
+                : args[4] + ".dat";
+
+        String serverEndpoint = null;
+        int serverPort = 0;
+        if(args[5].contains(":")) {
+            serverEndpoint = args[5];
+            serverPort = Integer.parseInt(args[5].split(":")[1]);
+        } else {
+            serverPort = Integer.parseInt(args[5]);
+        }
+
+        String playerEndpoint = null;
+        int playerPort = 0;
+        if(args[6].contains(":")) {
+            playerEndpoint = args[6];
+            playerPort = Integer.parseInt(args[6].split(":")[1]);
+        } else {
+            playerPort = Integer.parseInt(args[6]);
+        }
+
+        // for(int i = 0; i < args.length; i++) {
+        //     System.out.println("arg[" + i + "]: " + args[i]);
+        // }
+
+        SHPClient sc = new SHPClient(hostAddr, TCPPort);
+        sc.handshake(username, password, movie, serverPort);
         sc.destroy();
 
-        String remote = args[0]; // receive mediastream from this rmote endpoint
-        String destinations =
-            args[1]; // resend mediastream to this destination endpoint
+        SocketAddress inSocketAddress = serverEndpoint == null
+                ? new InetSocketAddress(hostAddr, serverPort)
+                : parseSocketAddress(serverEndpoint);
+        SocketAddress outSocketAddress = playerEndpoint == null
+                ? new InetSocketAddress(hostAddr, playerPort)
+                : parseSocketAddress(playerEndpoint);
 
-        SocketAddress inSocketAddress = parseSocketAddress(remote);
-        Set<SocketAddress> outSocketAddressSet =
-            Arrays.stream(destinations.split(","))
-                .map(s -> parseSocketAddress(s))
-                .collect(Collectors.toSet());
+        // Set<SocketAddress> outSocketAddressSet =
+        //     Arrays.stream(destinations.split(","))
+        //         .map(s -> parseSocketAddress(s))
+        //         .collect(Collectors.toSet());
 
         // Manage this according to your required setup, namely
         // if you want to use unicast or multicast channels
@@ -79,11 +103,35 @@ class hjUDPproxy {
             // countframes++;
             // System.out.println(":"+countframes); // debug
             // System.out.print(":"); // debug
-            for (SocketAddress outSocketAddress : outSocketAddressSet) {
+            // for (SocketAddress outSocketAddress : outSocketAddressSet) {
                 outSocket.send(new DatagramPacket(buffer, inPacket.getLength(),
                                                   outSocketAddress));
-            }
+            // }
         }
+        // inSocket.close();
+        // outSocket.close();
+    }
+
+    private static void showHelp() {
+        System.out.println(
+            "Usage: hjUDPproxy <username> <password> <host_addr> "
+            + "<tcp_port> <movie> <[udp_port | endpoint1]> <[player_port | endpoint2]>\n");
+
+        System.out.println("<username>: username of the client making request");
+        System.out.println("<password>: password of the client");
+        System.out.println("<host_addr>: address where communications will occur");
+        System.out.println("<tcp_port>: port that server is listening on");
+        System.out.println("<movie>: requested movie");
+        System.out.println( "<udp_port>: port where movie will be received from (on host_addr);" +
+            "\n\talternatively endpoint1 depending on formatting");
+        System.out.println( "<player_port>: port where movie will be streamed to (on host_addr);" +
+            "\n\talternatively endpoint2 depending on formatting");
+        System.out.println("<endpoint1>: endpoint for receiving stream");
+        System.out.println("<endpoint2>: endpoint of media player\n");
+
+        System.out.println("Ex: hjUDPproxy user1 password1 127.0.0.1 3333 cars 5555 9999");
+        System.out.println("Ex: hjUDPproxy user2 password2 172.50.0.2 3333 cars " +
+                                "172.50.0.2:5555 localhost:9999");
     }
 
     private static InetSocketAddress parseSocketAddress(String socketAddress) {
