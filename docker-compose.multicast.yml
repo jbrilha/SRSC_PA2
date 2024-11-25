@@ -1,0 +1,31 @@
+services:
+  receiver:
+    build:
+      context: .
+      dockerfile: Dockerfile.receiver
+    networks:
+      - multicast_net
+    cap_add:
+      - NET_ADMIN
+    command: ["239.0.0.1", "5000"]
+
+  sender:
+    build:
+      context: .
+      dockerfile: Dockerfile.sender
+    networks:
+      - multicast_net
+    depends_on:
+      - receiver
+    cap_add:
+      - NET_ADMIN
+    command: ["239.0.0.1", "5000", "1"]
+
+networks:
+  multicast_net:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: 1500
+    ipam:
+      config:
+        - subnet: 172.30.0.0/16

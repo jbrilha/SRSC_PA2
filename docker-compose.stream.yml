@@ -1,0 +1,35 @@
+services:
+  proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile.proxy
+    networks:
+      unicast_net:
+        ipv4_address: 172.50.0.2
+    cap_add:
+      - NET_ADMIN
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command: ["172.50.0.2:5000", "host.docker.internal:5000"]
+
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.streamServer
+    networks:
+      unicast_net:
+        ipv4_address: 172.50.0.3
+    depends_on:
+      - proxy
+    cap_add:
+      - NET_ADMIN
+    command: ["StreamingService/hjStreamServer/movies/cars.dat", "172.50.0.2", "5000"]
+
+networks:
+  unicast_net:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: 1500
+    ipam:
+      config:
+        - subnet: 172.50.0.0/16
