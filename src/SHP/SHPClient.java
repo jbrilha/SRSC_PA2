@@ -5,6 +5,8 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
 
+import org.bouncycastle.util.encoders.Hex;
+
 public class SHPClient {
     Socket sock;
     InputStream in;
@@ -29,14 +31,23 @@ public class SHPClient {
 
     public void handshake(String username, String password, String filename, int port) {
         try {
-            byte[] buf = new byte[1024];
-            in.read(buf);
-            SHPHeader ss = SHPHeader.getFromPacket(buf);
+            SHPHeader header = new SHPHeader(0x1, 0x1, 0x1);
+            SHPPayload payload = new SHPPayload(username.getBytes());
+            SHPPacket packet = new SHPPacket(header, payload);
+            System.out.println("sent msg1: " + packet + "\n");
+            out.write(packet.toByteArray());
 
-            System.out.println("\nSHPHeader: " + ss + "\n");
+            packet = SHPPacket.fromInputStream(in);
+            payload = packet.getPayload();
+            header = packet.getHeader();
+            String msg2 = Hex.toHexString(payload.getData());
+            System.out.println("rec msg2: " + packet + "\n");
 
-            var payload = host + "_" + port + "_" + filename;
-            out.write(payload.getBytes());
+            var payl = host + "_" + port + "_" + filename;
+            header = new SHPHeader(0x1, 0x1, 0x1);
+            payload = new SHPPayload(payl.getBytes());
+            packet = new SHPPacket(header, payload);
+            out.write(packet.toByteArray());
         } catch (IOException e) {
             e.printStackTrace();
 		}

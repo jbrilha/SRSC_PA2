@@ -1,6 +1,6 @@
 #!/bin/bash
 
-username="${1:-user1}"
+userID="${1:-user1@email.com}"
 password="${2:-password1}"
 
 host="${3:-localhost}"
@@ -14,4 +14,4 @@ player_endpoint="${7:-localhost:9000}"
 echo "Starting proxy passthrough from $server_endpoint to $player_endpoint"
 
 ./compile.sh 
-java -cp .:../libs/bcprov-jdk18on-1.78.1.jar StreamingService.hjUDPproxy.hjUDPproxy $username $password $host $tcp_port $movie $server_endpoint $player_endpoint
+java -cp .:../libs/bcprov-jdk18on-1.78.1.jar StreamingService.hjUDPproxy.hjUDPproxy $userID $password $host $tcp_port $movie $server_endpoint $player_endpoint

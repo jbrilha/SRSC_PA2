@@ -13,7 +13,8 @@ public class SHPHeader implements Serializable {
     private byte versionRelease;
     private byte msgType;
 
-    public SHPHeader() {}
+    public SHPHeader() {
+    }
 
     public SHPHeader(byte versionRelease, byte msgType) {
         this.versionRelease = versionRelease;
@@ -39,9 +40,21 @@ public class SHPHeader implements Serializable {
         return new SHPHeader(versionRelease, msgType);
     }
 
-    public static SHPHeader getFromPacket(byte[] packetData) {
-        ByteBuffer headerData =
-            ByteBuffer.wrap(Arrays.copyOf(packetData, HEADER_SIZE));
+    public static SHPHeader fromPacket(byte[] packetData) {
+        ByteBuffer headerData = ByteBuffer.wrap(
+            Arrays.copyOf(packetData, HEADER_SIZE));
+
+        byte versionRelease = headerData.get();
+        byte msgType = headerData.get();
+
+        return new SHPHeader(versionRelease, msgType);
+    }
+
+    // assumes the size is already the same as HEADER_SIZE, therefore needs to
+    // be handled before; reason for this is because I want to read the header
+    // msgType before reading the rest of the packet as above
+    public static SHPHeader fromBytes(byte[] bytes) {
+        ByteBuffer headerData = ByteBuffer.wrap(bytes);
 
         byte versionRelease = headerData.get();
         byte msgType = headerData.get();
@@ -58,8 +71,7 @@ public class SHPHeader implements Serializable {
             throw new IllegalArgumentException("Not a valid 4bit value :(");
         }
 
-        this.versionRelease =
-            (byte)((this.versionRelease & 0X0F) | version << 4);
+        this.versionRelease = (byte) ((this.versionRelease & 0X0F) | version << 4);
     }
 
     public void setRelease(int release) {
@@ -67,32 +79,50 @@ public class SHPHeader implements Serializable {
             throw new IllegalArgumentException("Not a valid 4bit value :(");
         }
 
-        this.versionRelease = (byte)((this.versionRelease & 0XF0) | release);
+        this.versionRelease = (byte) ((this.versionRelease & 0XF0) | release);
     }
 
-    public void setMsgType(byte msgType) { this.msgType = msgType; }
+    public void setMsgType(byte msgType) {
+        this.msgType = msgType;
+    }
 
-    public int getVersion() { return (this.versionRelease >> 4) & 0x0F; }
+    public int getMsgSize() {
+        switch (this.msgType) {
+            case 1:
+                return 320;
+            case 2:
+                return 48;
+            default:
+                return -1;
+        }
+    }
 
-    public int getRelease() { return this.versionRelease & 0x0F; }
+    public int getVersion() {
+        return (this.versionRelease >> 4) & 0x0F;
+    }
 
-    public byte getVersionRelease() { return this.versionRelease; }
+    public int getRelease() {
+        return this.versionRelease & 0x0F;
+    }
 
-    public short getMsgType() { return this.msgType; }
+    public byte getVersionRelease() {
+        return this.versionRelease;
+    }
+
+    public short getMsgType() {
+        return this.msgType;
+    }
 
     public byte[] toByteArray() {
-        return ByteBuffer
-            .allocate(HEADER_SIZE)
-            .put(this.versionRelease)
-            .put(this.msgType)
-            .array();
+        return ByteBuffer.allocate(HEADER_SIZE)
+                .put(this.versionRelease)
+                .put(this.msgType)
+                .array();
     }
 
     @Override
     public String toString() {
-
         return "Header [version = " + getVersion() +
-            " | release = " + getRelease() +
-            " | msgType = " + msgType + "]";
+                " | release = " + getRelease() + " | msgType = " + msgType + "]";
     }
 }
