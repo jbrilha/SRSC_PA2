@@ -52,7 +52,8 @@ class hjUDPproxy {
         // }
 
         SHPClient sc = new SHPClient(hostAddr, TCPPort);
-        sc.handshake(username, password, movie, serverPort);
+        System.out.println("what?");
+        sc.sendRequest(username, password, movie, serverPort);
         sc.destroy();
 
         SocketAddress inSocketAddress = serverEndpoint == null

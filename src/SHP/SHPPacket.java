@@ -1,12 +1,13 @@
 package SHP;
 
 import java.io.InputStream;
+import java.io.Serializable;
 import java.nio.ByteBuffer;
 
 /**
  * SHPPacket
  */
-public class SHPPacket {
+public class SHPPacket implements Serializable {
     private SHPHeader header;
     private SHPPayload payload;
 

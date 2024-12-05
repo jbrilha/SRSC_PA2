@@ -2,12 +2,13 @@ package SHP;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.net.Socket;
 
-import org.bouncycastle.util.encoders.Hex;
-
 public class SHPClient {
+    CryptoHandler cryptoHandler;
     Socket sock;
     InputStream in;
     OutputStream out;
@@ -17,6 +18,7 @@ public class SHPClient {
     public SHPClient() { this("localhost", 3333); }
 
     public SHPClient(String host, int port) {
+        this.cryptoHandler = new CryptoHandler();
         this.host = host;
         this.port = port;
 
@@ -29,28 +31,64 @@ public class SHPClient {
         }
     }
 
-    public void handshake(String username, String password, String filename, int port) {
+    public void sendRequest(String userId, String password, String filename,
+                            int port) {
         try {
-            SHPHeader header = new SHPHeader(0x1, 0x1, 0x1);
-            SHPPayload payload = new SHPPayload(username.getBytes());
-            SHPPacket packet = new SHPPacket(header, payload);
-            System.out.println("sent msg1: " + packet + "\n");
-            out.write(packet.toByteArray());
+            var oos = new ObjectOutputStream(out);
 
-            packet = SHPPacket.fromInputStream(in);
-            payload = packet.getPayload();
-            header = packet.getHeader();
-            String msg2 = Hex.toHexString(payload.getData());
-            System.out.println("rec msg2: " + packet + "\n");
+            // ---------------- MSG1 ----------------
+            SHPPacket packet = prepareMessage1(userId);
+            oos.writeObject(packet);
 
-            var payl = host + "_" + port + "_" + filename;
-            header = new SHPHeader(0x1, 0x1, 0x1);
-            payload = new SHPPayload(payl.getBytes());
-            packet = new SHPPacket(header, payload);
-            out.write(packet.toByteArray());
-        } catch (IOException e) {
+            // ---------------- MSG2 ----------------
+            var ois = new ObjectInputStream(in);
+            SHPPayload.Type2 payload2 = processMessage2(ois);
+
+            // ---------------- MSG3 ----------------
+            packet = prepareMessage3(userId, password, filename, payload2);
+            oos.writeObject(packet);
+
+            ois.close();
+            oos.close();
+        } catch (Exception e) {
             e.printStackTrace();
-		}
+        }
+    }
+
+    private SHPPacket prepareMessage1(String userId) throws Exception {
+        SHPHeader header = new SHPHeader(0x2, 0x1, 0x1);
+        SHPPayload.Type1 payload1 = new SHPPayload.Type1(userId.getBytes());
+        SHPPacket packet = new SHPPacket(header, payload1);
+        System.out.println("sent msg1: " + packet + "\n");
+        return packet;
+    }
+
+    private SHPPayload.Type2 processMessage2(ObjectInputStream ois)
+        throws Exception {
+        SHPPacket packet = (SHPPacket)ois.readObject();
+        SHPPayload.Type2 payload2 = (SHPPayload.Type2)packet.getPayload();
+        // TODO check header msg type
+        // header = packet.getHeader();
+        System.out.println("rec msg2: " + packet + "\n");
+        return payload2;
+    }
+
+    private SHPPacket prepareMessage3(String userId, String password,
+                                      String filename,
+                                      SHPPayload.Type2 payload2)
+        throws Exception {
+        byte[] pwHash = cryptoHandler.hashPassword(password);
+        SHPEncryptedRequest req =
+            new SHPEncryptedRequest(filename, userId, payload2.chall,
+                                    CryptoHandler.generateNonces(1), port);
+        byte[] pbe = cryptoHandler.encryptRequest(req, pwHash, payload2.salt,
+                                                  payload2.counter);
+
+        SHPHeader header = new SHPHeader(0x2, 0x1, 0x3);
+        SHPPayload.Type3 payload3 = new SHPPayload.Type3(pbe);
+        SHPPacket packet = new SHPPacket(header, payload3);
+        System.out.println("sent msg3: " + packet + "\n");
+        return packet;
     }
 
     public void destroy() {

@@ -33,13 +33,6 @@ public class SHPHeader implements Serializable {
         this.msgType = (byte) msgType;
     }
 
-    public static SHPHeader generateFromPayload(byte[] payload) {
-        byte versionRelease = 0x22;
-        byte msgType = 'c';
-
-        return new SHPHeader(versionRelease, msgType);
-    }
-
     public static SHPHeader fromPacket(byte[] packetData) {
         ByteBuffer headerData = ByteBuffer.wrap(
             Arrays.copyOf(packetData, HEADER_SIZE));
@@ -93,7 +86,8 @@ public class SHPHeader implements Serializable {
             case 2:
                 return 48;
             default:
-                return -1;
+                // TODO fix this
+                return 65000;
         }
     }
 

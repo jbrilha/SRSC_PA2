@@ -17,22 +17,39 @@ class hjStreamServer {
     static public void main(String[] args) throws Exception {
         SHPServer sc = new SHPServer();
         try {
-            String payload = sc.handshake();
+            System.out.println("what?");
+            SHPEncryptedRequest request = sc.receiveRequest();
+            String filename =
+                "StreamingService/hjStreamServer/movies/" + request.request;
 
-            String[] fields = payload.split("_");
+            System.out.println(filename);
+            DataInputStream g = null;
+            try {
+                g = new DataInputStream(new FileInputStream(filename));
+            } catch (FileNotFoundException f) {
+                sc.destroy();
+                System.out.println("Client requested non-existent file!!");
+                return;
+            }
+
+            sc.sendConfirmation(request.nonce4);
+            // String payload = sc.handshake();
+
+            //TODO change field name lol
+            String[] fields = request.request.split("_");
             String host = fields[0].trim();
-            int port = Integer.parseInt(fields[1].trim());
+            // int port = Integer.parseInt(fields[1].trim());
+            int port = request.udp_port;
 
             // TODO something about this
-            String filename = "StreamingService/hjStreamServer/movies/" + fields[2].trim();
             sc.destroy();
 
             int size;
             int count = 0;
             long time;
-            DataInputStream g = new DataInputStream(new FileInputStream(filename));
             byte[] buff = new byte[65000];
-            DSTPDatagramSocket s = new DSTPDatagramSocket(); // PA1: changed socket class
+            DSTPDatagramSocket s =
+                new DSTPDatagramSocket(); // PA1: changed socket class
             InetSocketAddress addr = new InetSocketAddress(host, port);
             DatagramPacket p = new DatagramPacket(buff, buff.length, addr);
             long t0 = System.nanoTime(); // tempo de referencia
