@@ -17,33 +17,18 @@ class hjStreamServer {
     static public void main(String[] args) throws Exception {
         SHPServer sc = new SHPServer();
         try {
-            System.out.println("what?");
-            SHPEncryptedRequest request = sc.receiveRequest();
+            SHPEncryptedRequest request = sc.handshake();
             String filename =
-                "StreamingService/hjStreamServer/movies/" + request.request;
+                "StreamingService/hjStreamServer/movies/" + request.body;
 
-            System.out.println(filename);
-            DataInputStream g = null;
-            try {
-                g = new DataInputStream(new FileInputStream(filename));
-            } catch (FileNotFoundException f) {
-                sc.destroy();
-                System.out.println("Client requested non-existent file!!");
-                return;
-            }
-
-            sc.sendConfirmation(request.nonce4);
-            // String payload = sc.handshake();
-
-            //TODO change field name lol
-            String[] fields = request.request.split("_");
-            String host = fields[0].trim();
-            // int port = Integer.parseInt(fields[1].trim());
+            String host = sc.sock.getInetAddress().getHostAddress();
             int port = request.udp_port;
 
             // TODO something about this
             sc.destroy();
 
+            DataInputStream g =
+                new DataInputStream(new FileInputStream(filename));
             int size;
             int count = 0;
             long time;

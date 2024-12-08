@@ -1,6 +1,7 @@
 package SHP;
 
 import java.io.BufferedReader;
+import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -10,17 +11,15 @@ import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.ByteBuffer;
-import java.security.SecureRandom;
-import java.util.Arrays;
+import java.security.PublicKey;
 import java.util.HashMap;
 import java.util.Map;
-import org.bouncycastle.util.encoders.Hex;
 
 public class SHPServer {
     CryptoHandler cryptoHandler;
     Map<String, UserData> userDB;
     ServerSocket serverSock;
-    Socket sock;
+    public Socket sock;
     InputStream in;
     OutputStream out;
     int port;
@@ -44,12 +43,11 @@ public class SHPServer {
     }
     // public void sendResponse() throws IllegalAccessException {}
 
-    public SHPEncryptedRequest receiveRequest() throws IllegalAccessException {
+    public SHPEncryptedRequest handshake() throws IllegalAccessException {
         try {
             var ois = new ObjectInputStream(in);
 
             // ---------------- MSG1 ----------------
-            // SHPPacket packet = SHPPacket.fromInputStream(in);
             SHPPayload.Type1 payload1 = processMessage1(ois);
             String userID = payload1.getUserId();
 
@@ -58,6 +56,7 @@ public class SHPServer {
                 throw new IllegalAccessException(
                     "User is not registered in the system");
             }
+            System.out.println(user);
 
             // ---------------- MSG2 ----------------
             byte[] nonces = CryptoHandler.generateNonces(3);
@@ -77,7 +76,7 @@ public class SHPServer {
             SHPPayload.Type3 payload3 = processMessage3(ois);
             SHPEncryptedRequest request = cryptoHandler.decryptRequest(
                 payload3.PBE, user.getPasswordHash(), salt, counter);
-            System.out.println("req: " + request.request);
+            validateRequest(request.body);
 
             ois.close();
             oos.close();
@@ -86,6 +85,14 @@ public class SHPServer {
             e.printStackTrace();
             return null;
         }
+    }
+
+    private void validateRequest(String request) throws FileNotFoundException {
+        if (request.equals("cars.dat") || request.equals("monsters.dat")) {
+            return;
+        }
+
+        throw new FileNotFoundException(request);
     }
 
     private SHPPayload.Type1 processMessage1(ObjectInputStream ois)
@@ -97,6 +104,7 @@ public class SHPServer {
         System.out.println("rec msg1: " + packet + "\n");
         return payload1;
     }
+
     private SHPPayload.Type3 processMessage3(ObjectInputStream ois)
         throws Exception {
         SHPPacket packet = (SHPPacket)ois.readObject();
@@ -107,7 +115,6 @@ public class SHPServer {
         return payload3;
     }
 
-
     private SHPPacket prepareMessage2(byte[] salt, byte[] counter, byte[] chall)
         throws Exception {
         SHPHeader header = new SHPHeader(0x2, 0x1, 0x2);
@@ -115,32 +122,6 @@ public class SHPServer {
         SHPPacket packet = new SHPPacket(header, payload2);
         System.out.println("sent msg2: " + packet + "\n");
         return packet;
-    }
-
-    public void sendConfirmation(byte[] nonce4) {
-        try {
-
-            var oos = new ObjectOutputStream(out);
-            // ---------------- MSG2 ----------------
-            SHPHeader header = new SHPHeader(0x2, 0x1, 0x2);
-            byte[] nonce5 = CryptoHandler.generateNonces(1);
-
-            // SHPPayload.Type4 payload2 =
-            // new SHPPayload.Type2(salt, counter, chall);
-            // packet = new SHPPacket(header, payload2);
-            // System.out.println("sent msg2: " + packet + "\n");
-            // oos.writeObject(packet);
-
-            // // packet = SHPPacket.fromInputStream(in);
-            // packet = (SHPPacket)ois.readObject();
-            // payload = packet.getPayload();
-            // header = packet.getHeader();
-            // String request =
-            // new String(payload.getData(), 0, payload.getDataLength());
-            //
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
     }
 
     public void destroy() {
@@ -163,7 +144,7 @@ public class SHPServer {
                 final String userID = fields[0].trim();
                 final byte[] pwHash = Utils.hexToBytes(fields[1].trim());
                 final byte[] salt = Utils.hexToBytes(fields[2].trim());
-                final byte[] key = Utils.hexToBytes(fields[3].trim());
+                final PublicKey key = cryptoHandler.parsePublicKeyHex(fields[3].trim());
 
                 userDB.put(userID, new UserData(pwHash, salt, key));
             }
@@ -176,9 +157,9 @@ public class SHPServer {
     private class UserData {
         byte[] passwordHash;
         byte[] salt;
-        byte[] publicKey;
+        PublicKey publicKey;
 
-        public UserData(byte[] pwHash, byte[] salt, byte[] key) {
+        public UserData(byte[] pwHash, byte[] salt, PublicKey key) {
             this.passwordHash = pwHash;
             this.salt = salt;
             this.publicKey = key;
@@ -186,25 +167,15 @@ public class SHPServer {
 
         public byte[] getPasswordHash() { return passwordHash; }
 
-        public void setPasswordHash(byte[] passwordHash) {
-            this.passwordHash = passwordHash;
-        }
-
         public byte[] getSalt() { return salt; }
 
-        public void setSalt(byte[] salt) { this.salt = salt; }
-
-        public byte[] getPublicKey() { return publicKey; }
-
-        public void setPublicKey(byte[] publicKey) {
-            this.publicKey = publicKey;
-        }
+        public PublicKey getPublicKey() { return publicKey; }
 
         @Override
         public String toString() {
             String passwordHash = Utils.bytesToHex(this.passwordHash);
             String salt = Utils.bytesToHex(this.salt);
-            String publicKey = Utils.bytesToHex(this.publicKey);
+            String publicKey = Utils.bytesToHex(this.publicKey.getEncoded());
 
             return "UserData [passwordHash = " + passwordHash +
                 " | salt = " + salt + " | publicKey = " + publicKey + "]";

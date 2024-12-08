@@ -8,10 +8,14 @@ import java.security.KeyFactory;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
+import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.security.SecureRandom;
 import java.security.Security;
 import java.security.Signature;
 import java.security.spec.InvalidKeySpecException;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.security.spec.X509EncodedKeySpec;
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
@@ -31,18 +35,20 @@ public class CryptoHandler {
     private Signature signature;
     private Cipher pwCipher;
     private Cipher confCipher;
-    private SecretKeyFactory keyFactory;
+    private SecretKeyFactory secKeyFactory;
+    private KeyFactory keyFactory;
 
     public CryptoHandler() {
         Security.addProvider(new BouncyCastleProvider());
 
         try {
+            this.keyFactory = KeyFactory.getInstance("EC");
             this.hash = MessageDigest.getInstance("SHA256", "BC");
             this.mac = Mac.getInstance("HMAC-SHA512", "BC");
             this.signature = Signature.getInstance("SHA256withECDSA", "BC");
             this.pwCipher =
                 Cipher.getInstance("PBEWITHSHA256AND192BITAES-CBC-BC", "BC");
-            this.keyFactory = SecretKeyFactory.getInstance(
+            this.secKeyFactory = SecretKeyFactory.getInstance(
                 "PBEWITHSHA256AND192BITAES-CBC-BC", "BC");
 
         } catch (NoSuchAlgorithmException e) {
@@ -54,12 +60,65 @@ public class CryptoHandler {
         }
     }
 
+    public PublicKey parsePublicKeyHex(String hex)
+        throws InvalidKeySpecException {
+
+        byte[] bytes = Utils.hexToBytes(hex);
+        X509EncodedKeySpec keySpec = new X509EncodedKeySpec(bytes);
+        return keyFactory.generatePublic(keySpec);
+    }
+
+    public PrivateKey parsePrivateKeyHex(String hex)
+        throws InvalidKeySpecException {
+
+        byte[] bytes = Utils.hexToBytes(hex);
+        PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(bytes);
+        return keyFactory.generatePrivate(keySpec);
+    }
+
     public byte[] encryptRequest(SHPEncryptedRequest request, byte[] password,
                                  byte[] salt, byte[] counter) throws Exception {
         System.out.println("client pw: " + Utils.bytesToHex(password));
         String pwHex = Utils.bytesToHex(password);
         PBEKeySpec pwSpec = new PBEKeySpec(pwHex.toCharArray());
-        Key sKey = keyFactory.generateSecret(pwSpec);
+        Key sKey = secKeyFactory.generateSecret(pwSpec);
+        String counterStr = Utils.bytesToHex(counter);
+        BigInteger counterBigInt = new BigInteger(counterStr, 16);
+        int counterInt = Math.max(counterBigInt.intValue() & 0xFFFF, 8192);
+        System.out.println("cint: " + counterInt);
+
+        // TODO FIX COUNTER
+        pwCipher.init(Cipher.ENCRYPT_MODE, sKey,
+                      new PBEParameterSpec(salt, counterInt));
+
+        return pwCipher.doFinal(request.serialize());
+    }
+
+    public SHPEncryptedRequest decryptRequest(byte[] request, byte[] password,
+                                              byte[] salt, byte[] counter)
+        throws Exception {
+        System.out.println("server pw: " + Utils.bytesToHex(password));
+        String pwHex = Utils.bytesToHex(password);
+        PBEKeySpec pwSpec = new PBEKeySpec(pwHex.toCharArray());
+        Key sKey = secKeyFactory.generateSecret(pwSpec);
+        String counterStr = Utils.bytesToHex(counter);
+        BigInteger counterBigInt = new BigInteger(counterStr, 16);
+        int counterInt = Math.max(counterBigInt.intValue() & 0xFFFF, 8192);
+
+        // TODO FIX COUNTER
+        pwCipher.init(Cipher.DECRYPT_MODE, sKey,
+                      new PBEParameterSpec(salt, counterInt));
+
+        return SHPEncryptedRequest.deserialize(pwCipher.doFinal(request));
+    }
+
+    public byte[] signRequest(SHPSignedRequest request, byte[] password,
+                              byte[] salt, byte[] counter) throws Exception {
+        System.out.println("client pw: " + Utils.bytesToHex(password));
+
+        String pwHex = Utils.bytesToHex(password);
+        PBEKeySpec pwSpec = new PBEKeySpec(pwHex.toCharArray());
+        Key sKey = secKeyFactory.generateSecret(pwSpec);
         String counterStr = Utils.bytesToHex(counter);
         BigInteger counterInt = new BigInteger(counterStr, 16);
 
@@ -68,23 +127,6 @@ public class CryptoHandler {
                       new PBEParameterSpec(salt, 2048));
 
         return pwCipher.doFinal(request.serialize());
-    }
-
-    public SHPEncryptedRequest decryptRequest(byte[] request, byte[] password,
-                                     byte[] salt, byte[] counter)
-        throws Exception {
-        System.out.println("server pw: " + Utils.bytesToHex(password));
-        String pwHex = Utils.bytesToHex(password);
-        PBEKeySpec pwSpec = new PBEKeySpec(pwHex.toCharArray());
-        Key sKey = keyFactory.generateSecret(pwSpec);
-        String counterStr = Utils.bytesToHex(counter);
-        BigInteger counterInt = new BigInteger(counterStr, 16);
-
-        // TODO FIX COUNTER
-        pwCipher.init(Cipher.DECRYPT_MODE, sKey,
-                      new PBEParameterSpec(salt, 2048));
-
-        return SHPEncryptedRequest.deserialize(pwCipher.doFinal(request));
     }
 
     public void signRequest() {}

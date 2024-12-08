@@ -24,40 +24,24 @@ class hjUDPproxy {
         String username = args[0];
         String password = args[1];
         String hostAddr = args[2];
-        int TCPPort = Integer.parseInt(args[3]);
+        int tcp_port = Integer.parseInt(args[3]);
         String movie = args[4].contains(".dat")
                 ? args[4]
                 : args[4] + ".dat";
 
         String serverEndpoint = null;
-        int serverPort = 0;
-        if(args[5].contains(":")) {
-            serverEndpoint = args[5];
-            serverPort = Integer.parseInt(args[5].split(":")[1]);
-        } else {
-            serverPort = Integer.parseInt(args[5]);
-        }
+        int udp_port = Integer.parseInt(args[5]);
+        System.out.println("udp: " + udp_port);
 
         String playerEndpoint = null;
-        int playerPort = 0;
-        if(args[6].contains(":")) {
-            playerEndpoint = args[6];
-            playerPort = Integer.parseInt(args[6].split(":")[1]);
-        } else {
-            playerPort = Integer.parseInt(args[6]);
-        }
+        int playerPort = Integer.parseInt(args[6]);
 
-        // for(int i = 0; i < args.length; i++) {
-        //     System.out.println("arg[" + i + "]: " + args[i]);
-        // }
-
-        SHPClient sc = new SHPClient(hostAddr, TCPPort);
-        System.out.println("what?");
-        sc.sendRequest(username, password, movie, serverPort);
+        SHPClient sc = new SHPClient(hostAddr, tcp_port);
+        sc.handshake(username, password, movie, udp_port);
         sc.destroy();
 
         SocketAddress inSocketAddress = serverEndpoint == null
-                ? new InetSocketAddress(hostAddr, serverPort)
+                ? new InetSocketAddress(hostAddr, udp_port)
                 : parseSocketAddress(serverEndpoint);
         SocketAddress outSocketAddress = playerEndpoint == null
                 ? new InetSocketAddress(hostAddr, playerPort)

@@ -1,11 +1,15 @@
 package SHP;
 
+import java.io.BufferedReader;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.net.Socket;
+import java.security.PrivateKey;
+import java.security.PublicKey;
 
 public class SHPClient {
     CryptoHandler cryptoHandler;
@@ -13,17 +17,19 @@ public class SHPClient {
     InputStream in;
     OutputStream out;
     String host;
-    int port;
+    int tcp_port;
+    ClientECC clientECC;
 
     public SHPClient() { this("localhost", 3333); }
 
-    public SHPClient(String host, int port) {
+    public SHPClient(String host, int tcp_port) {
         this.cryptoHandler = new CryptoHandler();
         this.host = host;
-        this.port = port;
+        this.tcp_port = tcp_port;
 
         try {
-            this.sock = new Socket(host, port);
+            this.clientECC = parseClientECC();
+            this.sock = new Socket(host, tcp_port);
             this.in = sock.getInputStream();
             this.out = sock.getOutputStream();
         } catch (Exception e) {
@@ -31,9 +37,10 @@ public class SHPClient {
         }
     }
 
-    public void sendRequest(String userId, String password, String filename,
-                            int port) {
+    public void handshake(String userId, String password, String filename,
+                          int udp_port) {
         try {
+            System.out.println(clientECC);
             var oos = new ObjectOutputStream(out);
 
             // ---------------- MSG1 ----------------
@@ -45,7 +52,8 @@ public class SHPClient {
             SHPPayload.Type2 payload2 = processMessage2(ois);
 
             // ---------------- MSG3 ----------------
-            packet = prepareMessage3(userId, password, filename, payload2);
+            packet =
+                prepareMessage3(userId, password, filename, udp_port, payload2);
             oos.writeObject(packet);
 
             ois.close();
@@ -74,18 +82,26 @@ public class SHPClient {
     }
 
     private SHPPacket prepareMessage3(String userId, String password,
-                                      String filename,
+                                      String filename, int udp_port,
                                       SHPPayload.Type2 payload2)
         throws Exception {
         byte[] pwHash = cryptoHandler.hashPassword(password);
-        SHPEncryptedRequest req =
-            new SHPEncryptedRequest(filename, userId, payload2.chall,
-                                    CryptoHandler.generateNonces(1), port);
-        byte[] pbe = cryptoHandler.encryptRequest(req, pwHash, payload2.salt,
+        byte[] nonce4 = CryptoHandler.generateNonces(1);
+        // TODO
+        byte[] ydhClient = CryptoHandler.generateNonces(1);
+
+        SHPEncryptedRequest encReq = new SHPEncryptedRequest(
+            filename, userId, payload2.chall, nonce4, udp_port);
+        byte[] pbe = cryptoHandler.encryptRequest(encReq, pwHash, payload2.salt,
                                                   payload2.counter);
 
+        SHPSignedRequest sigReq = new SHPSignedRequest(
+            filename, userId, payload2.chall, nonce4, udp_port, ydhClient);
+        byte[] sig = cryptoHandler.signRequest(sigReq, pwHash, payload2.salt,
+                                               payload2.counter);
+
         SHPHeader header = new SHPHeader(0x2, 0x1, 0x3);
-        SHPPayload.Type3 payload3 = new SHPPayload.Type3(pbe);
+        SHPPayload.Type3 payload3 = new SHPPayload.Type3(pbe, sig, ydhClient);
         SHPPacket packet = new SHPPacket(header, payload3);
         System.out.println("sent msg3: " + packet + "\n");
         return packet;
@@ -98,6 +114,53 @@ public class SHPClient {
             sock.close();
         } catch (IOException e) {
             e.printStackTrace();
+        }
+    }
+
+    private ClientECC parseClientECC() {
+        try (BufferedReader reader =
+                 new BufferedReader(new FileReader("ClientECCKeyPair.sec"))) {
+            String curve = reader.readLine().split(":")[1].trim();
+
+            String privKeyHex = reader.readLine().split(":")[1].trim();
+            PrivateKey privKey = cryptoHandler.parsePrivateKeyHex(privKeyHex);
+
+            String pubKeyHex = reader.readLine().split(":")[1].trim();
+            PublicKey pubKey = cryptoHandler.parsePublicKeyHex(pubKeyHex);
+
+            return new ClientECC(curve, privKey, pubKey);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private class ClientECC {
+        String curve;
+        PublicKey publicKey;
+        PrivateKey privateKey;
+
+        public ClientECC(String curve, PrivateKey privKey, PublicKey pubKey) {
+            this.curve = curve;
+            this.privateKey = privKey;
+            this.publicKey = pubKey;
+        }
+
+        public String getCurve() { return curve; }
+
+        public PublicKey getPublicKey() { return publicKey; }
+
+        public PrivateKey getPrivateKey() { return privateKey; }
+
+        @Override
+        public String toString() {
+            String privateKey = Utils.bytesToHex(this.privateKey.getEncoded());
+            String publicKey = Utils.bytesToHex(this.publicKey.getEncoded());
+
+            return "ClientECC [curve = " + this.curve +
+                " | privateKey = " + privateKey +
+                " | publicKey = " + publicKey + "]";
         }
     }
 }

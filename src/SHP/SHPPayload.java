@@ -57,10 +57,10 @@ public class SHPPayload implements Serializable {
         public byte[] ydhClient;
         public byte[] hash;
 
-        public Type3(byte[] pbe) {
+        public Type3(byte[] pbe, byte[] signature, byte[] ydhClient) {
             this.PBE = pbe;
-            this.signature = new byte[16];
-            this.ydhClient = new byte[16];
+            this.signature = signature;
+            this.ydhClient = ydhClient;
             this.hash = new byte[16];
         }
 
