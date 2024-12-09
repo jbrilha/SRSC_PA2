@@ -8,7 +8,6 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.net.Socket;
-import java.security.PrivateKey;
 import java.security.PublicKey;
 
 public class SHPClient {
@@ -18,7 +17,7 @@ public class SHPClient {
     OutputStream out;
     String host;
     int tcp_port;
-    ClientECC clientECC;
+    ECConfig clientECC;
     PublicKey serverPubKey;
 
     public SHPClient() { this("localhost", 3333); }
@@ -29,7 +28,8 @@ public class SHPClient {
         this.tcp_port = tcp_port;
 
         try {
-            this.clientECC = parseClientECC();
+            this.clientECC =
+                ECConfig.parseConfigFile("ClientECCKeyPair.sec", cryptoHandler);
             this.serverPubKey = parseServerKey();
             this.sock = new Socket(host, tcp_port);
             this.in = sock.getInputStream();
@@ -37,14 +37,12 @@ public class SHPClient {
         } catch (Exception e) {
             System.out.println("Exception: " + e.getMessage());
         }
-
-        System.out.println(this);
     }
 
-    public void handshake(String userId, String password, String filename,
-                          int udp_port) {
+    public CryptoConfig handshake(String userId, String password,
+                                  String filename, int udp_port) {
         try {
-            System.out.println(clientECC);
+            byte[] pwHash = cryptoHandler.hashPassword(password);
             var oos = new ObjectOutputStream(out);
 
             // ---------------- MSG1 ----------------
@@ -57,14 +55,52 @@ public class SHPClient {
 
             // ---------------- MSG3 ----------------
             packet =
-                prepareMessage3(userId, password, filename, udp_port, payload2);
+                prepareMessage3(userId, pwHash, filename, udp_port, payload2);
             oos.writeObject(packet);
+
+            // ---------------- MSG4 ----------------
+            SHPPayload.Type4 payload4 = processMessage4(ois);
+            SHPEncryptedConfirmation confirmation =
+                validateConfirmation(userId, pwHash, payload4);
+            System.out.println(confirmation);
+
+            // ---------------- MSG5 ----------------
+            String oi = "oi";
+            oos.writeObject(oi);
 
             ois.close();
             oos.close();
+            destroy();
+            return CryptoConfig.deserialize(confirmation.config);
         } catch (Exception e) {
             e.printStackTrace();
+            return null;
         }
+    }
+
+    private SHPEncryptedConfirmation
+    validateConfirmation(String userId, byte[] pwHash,
+                         SHPPayload.Type4 payload4) throws Exception {
+        boolean validAuth = cryptoHandler.validateAuth(
+            pwHash, payload4.envelope, payload4.ydhServer, payload4.signature,
+            payload4.authCode);
+        if (!validAuth) {
+            throw new IllegalAccessException();
+        }
+        SHPEncryptedConfirmation confirmation =
+            cryptoHandler.decryptConfirmation(payload4.envelope,
+                                              clientECC.getPrivateKey());
+        SHPSignedConfirmation sigReq =
+            SHPSignedConfirmation.fromEncryptedConfirmation(
+                confirmation, userId, payload4.ydhServer);
+        boolean validSign = cryptoHandler.validateSignature(
+            sigReq, payload4.signature, serverPubKey);
+
+        if (!validSign) {
+            throw new IllegalAccessException();
+        }
+
+        return confirmation;
     }
 
     private SHPPacket prepareMessage1(String userId) throws Exception {
@@ -85,16 +121,13 @@ public class SHPClient {
         return payload2;
     }
 
-    private SHPPacket prepareMessage3(String userId, String password,
+    private SHPPacket prepareMessage3(String userId, byte[] pwHash,
                                       String filename, int udp_port,
                                       SHPPayload.Type2 payload2)
         throws Exception {
-        byte[] pwHash = cryptoHandler.hashPassword(password);
         byte[] nonce4 = CryptoHandler.generateNonces(1);
-        // TODO
-        // PublicKey ydhPublicKey = null;
         byte[] ydhClient = cryptoHandler.generateDHPubKey();
-        System.out.println("\n\nydhclient: " + Utils.bytesToHex(ydhClient));
+        // System.out.println("\n\nydhclient: " + Utils.bytesToHex(ydhClient));
 
         SHPEncryptedRequest encReq = new SHPEncryptedRequest(
             filename, userId, payload2.chall, nonce4, udp_port);
@@ -103,19 +136,28 @@ public class SHPClient {
 
         SHPSignedRequest sigReq = new SHPSignedRequest(
             filename, userId, payload2.chall, nonce4, udp_port, ydhClient);
-        System.out.println("sigReq: " + sigReq);
         byte[] sig =
             cryptoHandler.signRequest(sigReq, clientECC.getPrivateKey());
 
-        byte[] hash =
+        byte[] authCode =
             cryptoHandler.authenticateRequest(pwHash, pbe, ydhClient, sig);
 
         SHPHeader header = new SHPHeader(0x2, 0x1, 0x3);
         SHPPayload.Type3 payload3 =
-            new SHPPayload.Type3(pbe, ydhClient, sig, hash);
+            new SHPPayload.Type3(pbe, ydhClient, sig, authCode);
         SHPPacket packet = new SHPPacket(header, payload3);
         System.out.println("sent msg3: " + packet + "\n");
         return packet;
+    }
+
+    private SHPPayload.Type4 processMessage4(ObjectInputStream ois)
+        throws Exception {
+        SHPPacket packet = (SHPPacket)ois.readObject();
+        SHPPayload.Type4 payload4 = (SHPPayload.Type4)packet.getPayload();
+        // TODO check header msg type
+        // header = packet.getHeader();
+        System.out.println("rec msg4: " + packet + "\n");
+        return payload4;
     }
 
     public void destroy() {
@@ -128,32 +170,12 @@ public class SHPClient {
         }
     }
 
-    private ClientECC parseClientECC() {
-        try (BufferedReader reader =
-                 new BufferedReader(new FileReader("ClientECCKeyPair.sec"))) {
-            String curve = reader.readLine().split(":")[1].trim();
-
-            String privKeyHex = reader.readLine().split(":")[1].trim();
-            PrivateKey privKey = cryptoHandler.parsePrivateKeyHex(privKeyHex);
-
-            String pubKeyHex = reader.readLine().split(":")[1].trim();
-            PublicKey pubKey = cryptoHandler.parsePublicKeyHex(pubKeyHex);
-
-            return new ClientECC(curve, privKey, pubKey);
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            return null;
-        }
-    }
-
     private PublicKey parseServerKey() {
         try (BufferedReader reader =
                  new BufferedReader(new FileReader("ServerECCPubKey.txt"))) {
             String curve = reader.readLine().split(":")[1].trim();
 
             String pubKeyHex = reader.readLine().split(":")[1].trim();
-            System.out.println("\n\n\npkkkkkkkk: " + pubKeyHex + "\n\n");
             return cryptoHandler.parsePublicKeyHex(pubKeyHex);
         } catch (Exception e) {
             e.printStackTrace();
@@ -166,33 +188,5 @@ public class SHPClient {
         String serverKey = Utils.bytesToHex(this.serverPubKey.getEncoded());
         return "SHPClient [sock = " + sock.getInetAddress() +
             " | serverPubKey = " + serverKey + "]";
-    }
-
-    private class ClientECC {
-        String curve;
-        PublicKey publicKey;
-        PrivateKey privateKey;
-
-        public ClientECC(String curve, PrivateKey privKey, PublicKey pubKey) {
-            this.curve = curve;
-            this.privateKey = privKey;
-            this.publicKey = pubKey;
-        }
-
-        public String getCurve() { return curve; }
-
-        public PublicKey getPublicKey() { return publicKey; }
-
-        public PrivateKey getPrivateKey() { return privateKey; }
-
-        @Override
-        public String toString() {
-            String privateKey = Utils.bytesToHex(this.privateKey.getEncoded());
-            String publicKey = Utils.bytesToHex(this.publicKey.getEncoded());
-
-            return "ClientECC [curve = " + this.curve +
-                " | privateKey = " + privateKey +
-                " | publicKey = " + publicKey + "]";
-        }
     }
 }

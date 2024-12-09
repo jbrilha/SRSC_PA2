@@ -17,15 +17,14 @@ class hjStreamServer {
     static public void main(String[] args) throws Exception {
         SHPServer sc = new SHPServer();
         try {
-            SHPEncryptedRequest request = sc.handshake();
+            SHPRequest request = sc.handshake();
             String filename =
                 "StreamingService/hjStreamServer/movies/" + request.body;
 
             String host = sc.sock.getInetAddress().getHostAddress();
             int port = request.udp_port;
+            System.out.println(request);
 
-            // TODO something about this
-            sc.destroy();
 
             DataInputStream g =
                 new DataInputStream(new FileInputStream(filename));
@@ -34,7 +33,7 @@ class hjStreamServer {
             long time;
             byte[] buff = new byte[65000];
             DSTPDatagramSocket s =
-                new DSTPDatagramSocket(); // PA1: changed socket class
+                new DSTPDatagramSocket(request.config); // PA1: changed socket class
             InetSocketAddress addr = new InetSocketAddress(host, port);
             DatagramPacket p = new DatagramPacket(buff, buff.length, addr);
             long t0 = System.nanoTime(); // tempo de referencia

@@ -1,5 +1,6 @@
 package DSTP;
 
+import SHP.CryptoConfig;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.net.DatagramPacket;
@@ -17,26 +18,27 @@ public class DSTPDatagramSocket extends DatagramSocket {
     private short sentSeqNr = 0;
     private short recSeqNr = 0;
 
-    public DSTPDatagramSocket() throws SocketException {
-        this.cryptoHandler = new CryptoHandler("cryptoconfig.txt");
+    public DSTPDatagramSocket(CryptoConfig cc) throws SocketException {
+        this.cryptoHandler = new CryptoHandler(cc);
 
         System.out.println("\nUsing DSTPSocket secured by: " +
                            cryptoHandler.summary());
     }
 
-    public DSTPDatagramSocket(SocketAddress sa) throws SocketException {
+    public DSTPDatagramSocket(SocketAddress sa, CryptoConfig cc)
+        throws SocketException {
         super(sa);
 
-        this.cryptoHandler = new CryptoHandler("cryptoconfig.txt");
+        this.cryptoHandler = new CryptoHandler(cc);
 
         System.out.println("\nUsing DSTPSocket secured by: " +
                            cryptoHandler.summary());
     }
 
-    public DSTPDatagramSocket(int port) throws SocketException {
+    public DSTPDatagramSocket(int port, CryptoConfig cc) throws SocketException {
         super(port);
 
-        this.cryptoHandler = new CryptoHandler("cryptoconfig.txt");
+        this.cryptoHandler = new CryptoHandler(cc);
 
         System.out.println("\nUsing DSTPSocket secured by: " +
                            cryptoHandler.summary());
@@ -81,7 +83,8 @@ public class DSTPDatagramSocket extends DatagramSocket {
             DSTPPayload.fromPacket(payloadData, cryptoHandler);
 
         try {
-            payload.decryptAndValidate(this.recSeqNr, header.getPayloadLength());
+            payload.decryptAndValidate(this.recSeqNr,
+                                       header.getPayloadLength());
 
             this.recSeqNr++;
 
@@ -102,11 +105,7 @@ public class DSTPDatagramSocket extends DatagramSocket {
         }
     }
 
-    public void setSentSeqNr(short seqNr) {
-        this.sentSeqNr = seqNr;
-    }
+    public void setSentSeqNr(short seqNr) { this.sentSeqNr = seqNr; }
 
-    public void setRecSeqNr(short seqNr) {
-        this.recSeqNr = seqNr;
-    }
+    public void setRecSeqNr(short seqNr) { this.recSeqNr = seqNr; }
 }

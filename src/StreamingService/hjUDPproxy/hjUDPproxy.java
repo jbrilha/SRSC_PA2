@@ -37,8 +37,7 @@ class hjUDPproxy {
         int playerPort = Integer.parseInt(args[6]);
 
         SHPClient sc = new SHPClient(hostAddr, tcp_port);
-        sc.handshake(username, password, movie, udp_port);
-        sc.destroy();
+        CryptoConfig cc = sc.handshake(username, password, movie, udp_port);
 
         SocketAddress inSocketAddress = serverEndpoint == null
                 ? new InetSocketAddress(hostAddr, udp_port)
@@ -59,7 +58,7 @@ class hjUDPproxy {
         // uncomment the following line
 
         DSTPDatagramSocket inSocket = new DSTPDatagramSocket(
-            inSocketAddress); // PA1: changed socket class
+            inSocketAddress, cc); // PA1: changed socket class
 
         // If listen a remote multicast server using IP Multicasting
         // addressing (remember IP Multicast Range) and port

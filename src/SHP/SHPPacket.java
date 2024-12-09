@@ -19,29 +19,29 @@ public class SHPPacket implements Serializable {
         this.payload = payload;
     }
 
-    public static SHPPacket fromByteArray(byte[] data) {
-        SHPHeader header = SHPHeader.fromPacket(data);
-        SHPPayload payload = SHPPayload.fromPacket(data);
-
-        return new SHPPacket(header, payload);
-    }
-
-    public static SHPPacket fromInputStream(InputStream in) {
-        try {
-            byte[] headerBytes = new byte[SHPHeader.HEADER_SIZE];
-            in.read(headerBytes);
-            SHPHeader header = SHPHeader.fromBytes(headerBytes);
-
-            byte[] payloadBytes = new byte[header.getMsgSize()];
-            int readBytes = in.read(payloadBytes);
-            SHPPayload payload = SHPPayload.fromBytes(payloadBytes, readBytes);
-
-            return new SHPPacket(header, payload);
-
-        } catch (Exception e) {
-            return null;
-        }
-    }
+    // public static SHPPacket fromByteArray(byte[] data) {
+    //     SHPHeader header = SHPHeader.fromPacket(data);
+    //     SHPPayload payload = SHPPayload.fromPacket(data);
+    //
+    //     return new SHPPacket(header, payload);
+    // }
+    //
+    // public static SHPPacket fromInputStream(InputStream in) {
+    //     try {
+    //         byte[] headerBytes = new byte[SHPHeader.HEADER_SIZE];
+    //         in.read(headerBytes);
+    //         SHPHeader header = SHPHeader.fromBytes(headerBytes);
+    //
+    //         byte[] payloadBytes = new byte[header.getMsgSize()];
+    //         int readBytes = in.read(payloadBytes);
+    //         SHPPayload payload = SHPPayload.fromBytes(payloadBytes, readBytes);
+    //
+    //         return new SHPPacket(header, payload);
+    //
+    //     } catch (Exception e) {
+    //         return null;
+    //     }
+    // }
 
     public SHPHeader getHeader() {
         return header;
@@ -58,14 +58,14 @@ public class SHPPacket implements Serializable {
     public void setPayload(SHPPayload payload) {
         this.payload = payload;
     }
-
-    public byte[] toByteArray() {
-        return ByteBuffer
-                .allocate(SHPHeader.HEADER_SIZE + payload.getDataLength())
-                .put(this.header.toByteArray())
-                .put(this.payload.getData())
-                .array();
-    }
+    //
+    // public byte[] toByteArray() {
+    //     return ByteBuffer
+    //             .allocate(SHPHeader.HEADER_SIZE + payload.getDataLength())
+    //             .put(this.header.toByteArray())
+    //             .put(this.payload.getData())
+    //             .array();
+    // }
 
     @Override
     public String toString() {

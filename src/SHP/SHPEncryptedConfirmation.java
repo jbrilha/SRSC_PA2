@@ -7,21 +7,18 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 
-public class SHPEncryptedRequest implements Serializable {
+public class SHPEncryptedConfirmation implements Serializable {
     public String body;
-    public String userId;
-    public byte[] nonce3plus1;
-    public byte[] nonce4;
-    public int udp_port;
+    public byte[] nonce4plus1;
+    public byte[] nonce5;
+    public byte[] config;
 
-    public SHPEncryptedRequest(String body, String userId, byte[] nonce3plus1,
-                               byte[] nonce4, int udp_port) {
+    public SHPEncryptedConfirmation(String body, byte[] nonce4plus1,
+                                    byte[] nonce5, byte[] config) {
         this.body = body;
-        this.userId = userId;
-        // TODO THIS PLUS 1
-        this.nonce3plus1 = nonce3plus1;
-        this.nonce4 = nonce4;
-        this.udp_port = udp_port;
+        this.nonce4plus1 = nonce4plus1;
+        this.nonce5 = nonce5;
+        this.config = config;
     }
 
     public byte[] serialize() {
@@ -35,21 +32,27 @@ public class SHPEncryptedRequest implements Serializable {
         }
     }
 
-    public static SHPEncryptedRequest deserialize(byte[] data)
+    public static SHPEncryptedConfirmation deserialize(byte[] data)
         throws Exception {
         try (ByteArrayInputStream bais = new ByteArrayInputStream(data);
              ObjectInputStream ois = new ObjectInputStream(bais);) {
 
-            return (SHPEncryptedRequest)ois.readObject();
+            return (SHPEncryptedConfirmation)ois.readObject();
         }
     }
 
     @Override
     public String toString() {
-        return "EncryptedRequest [body= " + body +
-            ", userId=" + userId +
-            ", nonce3plus1=" + Utils.bytesToHex(nonce3plus1) +
-            ", nonce4=" + Utils.bytesToHex(nonce4) +
-            ", udp_port=" + udp_port + "]";
+        CryptoConfig cc = null;
+		try {
+			cc = CryptoConfig.deserialize(config);
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+
+        return "EncryptedConfirmation [body= " + body +
+            ", nonce3plus1=" + Utils.bytesToHex(nonce4plus1) +
+            ", nonce4=" + Utils.bytesToHex(nonce5) +
+            ", config=" + cc + "]";
     }
 }

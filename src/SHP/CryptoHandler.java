@@ -1,6 +1,10 @@
 package SHP;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
+import java.io.FileReader;
+import java.io.IOException;
+import java.io.Serializable;
 import java.math.BigInteger;
 import java.security.AlgorithmParameterGenerator;
 import java.security.AlgorithmParameters;
@@ -43,7 +47,7 @@ public class CryptoHandler {
     private Mac mac;
     private Signature signature;
     private Cipher pwCipher;
-    private Cipher confCipher;
+    private Cipher envCipher;
     private SecretKeyFactory secKeyFactory;
     private KeyFactory keyFactory;
     private KeyAgreement keyAgreement;
@@ -84,6 +88,7 @@ public class CryptoHandler {
             this.signature = Signature.getInstance("SHA256withECDSA", "BC");
             this.pwCipher =
                 Cipher.getInstance("PBEWITHSHA256AND192BITAES-CBC-BC", "BC");
+            this.envCipher = Cipher.getInstance("ECIES", "BC");
             this.secKeyFactory = SecretKeyFactory.getInstance(
                 "PBEWITHSHA256AND192BITAES-CBC-BC", "BC");
             this.keyAgreement = KeyAgreement.getInstance("DH", "BC");
@@ -98,7 +103,6 @@ public class CryptoHandler {
         } catch (NoSuchPaddingException e) {
             e.printStackTrace();
         } catch (InvalidAlgorithmParameterException e) {
-            // TODO Auto-generated catch block
             e.printStackTrace();
         }
     }
@@ -117,6 +121,20 @@ public class CryptoHandler {
         byte[] bytes = Utils.hexToBytes(hex);
         PKCS8EncodedKeySpec keySpec = new PKCS8EncodedKeySpec(bytes);
         return keyFactory.generatePrivate(keySpec);
+    }
+
+    public byte[] encryptConfirmation(SHPEncryptedConfirmation confirmation,
+                                      PublicKey pubKey) throws Exception {
+        envCipher.init(Cipher.ENCRYPT_MODE, pubKey);
+        return envCipher.doFinal(confirmation.serialize());
+    }
+
+    public SHPEncryptedConfirmation decryptConfirmation(byte[] confirmation,
+                                                        PrivateKey privKey)
+        throws Exception {
+        envCipher.init(Cipher.DECRYPT_MODE, privKey);
+        return SHPEncryptedConfirmation.deserialize(
+            envCipher.doFinal(confirmation));
     }
 
     public byte[] encryptRequest(SHPEncryptedRequest request, byte[] password,
@@ -164,8 +182,16 @@ public class CryptoHandler {
         return signature.sign();
     }
 
-    public byte[] generateDHPubKey()
+    public byte[] signConfirmation(SHPSignedConfirmation confirmation, PrivateKey privKey)
         throws Exception {
+
+        signature.initSign(privKey, new SecureRandom());
+        byte[] conf = confirmation.serialize();
+        signature.update(conf);
+        return signature.sign();
+    }
+
+    public byte[] generateDHPubKey() throws Exception {
         return keyPairGenerator.generateKeyPair().getPublic().getEncoded();
     }
 
@@ -180,12 +206,12 @@ public class CryptoHandler {
 
         Key key = new SecretKeySpec(pwHash, HMAC);
         mac.init(key);
+
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
         baos.write(pbe);
         baos.write(ydhClient);
         baos.write(sig);
-        byte[] data = baos.toByteArray();
-        mac.update(data);
+        mac.update(baos.toByteArray());
 
         return mac.doFinal();
     }
@@ -210,6 +236,14 @@ public class CryptoHandler {
 
         signature.initVerify(pubKey);
         signature.update(request.serialize());
+        return signature.verify(sig);
+    }
+
+    public boolean validateSignature(SHPSignedConfirmation confirmation, byte[] sig,
+                                     PublicKey pubKey) throws Exception {
+
+        signature.initVerify(pubKey);
+        signature.update(confirmation.serialize());
         return signature.verify(sig);
     }
 

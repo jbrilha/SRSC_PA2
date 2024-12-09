@@ -7,20 +7,14 @@ import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 
-public class SHPEncryptedRequest implements Serializable {
+public class SHPRequest implements Serializable {
     public String body;
-    public String userId;
-    public byte[] nonce3plus1;
-    public byte[] nonce4;
+    public CryptoConfig config;
     public int udp_port;
 
-    public SHPEncryptedRequest(String body, String userId, byte[] nonce3plus1,
-                               byte[] nonce4, int udp_port) {
+    public SHPRequest(String body, CryptoConfig cc, int udp_port) {
         this.body = body;
-        this.userId = userId;
-        // TODO THIS PLUS 1
-        this.nonce3plus1 = nonce3plus1;
-        this.nonce4 = nonce4;
+        this.config = cc;
         this.udp_port = udp_port;
     }
 
@@ -35,21 +29,19 @@ public class SHPEncryptedRequest implements Serializable {
         }
     }
 
-    public static SHPEncryptedRequest deserialize(byte[] data)
+    public static SHPRequest deserialize(byte[] data)
         throws Exception {
         try (ByteArrayInputStream bais = new ByteArrayInputStream(data);
              ObjectInputStream ois = new ObjectInputStream(bais);) {
 
-            return (SHPEncryptedRequest)ois.readObject();
+            return (SHPRequest)ois.readObject();
         }
     }
 
     @Override
     public String toString() {
-        return "EncryptedRequest [body= " + body +
-            ", userId=" + userId +
-            ", nonce3plus1=" + Utils.bytesToHex(nonce3plus1) +
-            ", nonce4=" + Utils.bytesToHex(nonce4) +
+        return "Request [body= " + body +
+            ", condfig=" + config +
             ", udp_port=" + udp_port + "]";
     }
 }
