@@ -19,6 +19,7 @@ public class SHPClient {
     String host;
     int tcp_port;
     ClientECC clientECC;
+    PublicKey serverPubKey;
 
     public SHPClient() { this("localhost", 3333); }
 
@@ -29,12 +30,15 @@ public class SHPClient {
 
         try {
             this.clientECC = parseClientECC();
+            this.serverPubKey = parseServerKey();
             this.sock = new Socket(host, tcp_port);
             this.in = sock.getInputStream();
             this.out = sock.getOutputStream();
         } catch (Exception e) {
             System.out.println("Exception: " + e.getMessage());
         }
+
+        System.out.println(this);
     }
 
     public void handshake(String userId, String password, String filename,
@@ -88,7 +92,9 @@ public class SHPClient {
         byte[] pwHash = cryptoHandler.hashPassword(password);
         byte[] nonce4 = CryptoHandler.generateNonces(1);
         // TODO
-        byte[] ydhClient = CryptoHandler.generateNonces(1);
+        // PublicKey ydhPublicKey = null;
+        byte[] ydhClient = cryptoHandler.generateDHPubKey();
+        System.out.println("\n\nydhclient: " + Utils.bytesToHex(ydhClient));
 
         SHPEncryptedRequest encReq = new SHPEncryptedRequest(
             filename, userId, payload2.chall, nonce4, udp_port);
@@ -97,11 +103,16 @@ public class SHPClient {
 
         SHPSignedRequest sigReq = new SHPSignedRequest(
             filename, userId, payload2.chall, nonce4, udp_port, ydhClient);
-        byte[] sig = cryptoHandler.signRequest(sigReq, pwHash, payload2.salt,
-                                               payload2.counter);
+        System.out.println("sigReq: " + sigReq);
+        byte[] sig =
+            cryptoHandler.signRequest(sigReq, clientECC.getPrivateKey());
+
+        byte[] hash =
+            cryptoHandler.authenticateRequest(pwHash, pbe, ydhClient, sig);
 
         SHPHeader header = new SHPHeader(0x2, 0x1, 0x3);
-        SHPPayload.Type3 payload3 = new SHPPayload.Type3(pbe, sig, ydhClient);
+        SHPPayload.Type3 payload3 =
+            new SHPPayload.Type3(pbe, ydhClient, sig, hash);
         SHPPacket packet = new SHPPacket(header, payload3);
         System.out.println("sent msg3: " + packet + "\n");
         return packet;
@@ -134,6 +145,27 @@ public class SHPClient {
             e.printStackTrace();
             return null;
         }
+    }
+
+    private PublicKey parseServerKey() {
+        try (BufferedReader reader =
+                 new BufferedReader(new FileReader("ServerECCPubKey.txt"))) {
+            String curve = reader.readLine().split(":")[1].trim();
+
+            String pubKeyHex = reader.readLine().split(":")[1].trim();
+            System.out.println("\n\n\npkkkkkkkk: " + pubKeyHex + "\n\n");
+            return cryptoHandler.parsePublicKeyHex(pubKeyHex);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    @Override
+    public String toString() {
+        String serverKey = Utils.bytesToHex(this.serverPubKey.getEncoded());
+        return "SHPClient [sock = " + sock.getInetAddress() +
+            " | serverPubKey = " + serverKey + "]";
     }
 
     private class ClientECC {

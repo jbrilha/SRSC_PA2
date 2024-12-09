@@ -45,6 +45,12 @@ public class SHPSignedRequest implements Serializable {
         }
     }
 
+    public static SHPSignedRequest fromEncryptedRequest(SHPEncryptedRequest req,
+                                                        byte[] ydhClient) {
+        return new SHPSignedRequest(req.body, req.userId, req.nonce3plus1,
+                                    req.nonce4, req.udp_port, ydhClient);
+    }
+
     @Override
     public String toString() {
         return "SignedRequest [body= " + body + ", userId=" + userId +

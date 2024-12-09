@@ -1,10 +1,14 @@
 package SHP;
 
+import java.io.ByteArrayOutputStream;
 import java.math.BigInteger;
+import java.security.AlgorithmParameterGenerator;
+import java.security.AlgorithmParameters;
 import java.security.InvalidAlgorithmParameterException;
 import java.security.InvalidKeyException;
 import java.security.Key;
 import java.security.KeyFactory;
+import java.security.KeyPairGenerator;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
@@ -14,22 +18,27 @@ import java.security.SecureRandom;
 import java.security.Security;
 import java.security.Signature;
 import java.security.spec.InvalidKeySpecException;
+import java.security.spec.InvalidParameterSpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
+import javax.crypto.KeyAgreement;
 import javax.crypto.Mac;
 import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SecretKeyFactory;
+import javax.crypto.spec.DHParameterSpec;
 import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.PBEParameterSpec;
+import javax.crypto.spec.SecretKeySpec;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
 /**
  * CryptoHandler
  */
 public class CryptoHandler {
+    private final static String HMAC = "HMAC-SHA512";
     private MessageDigest hash;
     private Mac mac;
     private Signature signature;
@@ -37,25 +46,59 @@ public class CryptoHandler {
     private Cipher confCipher;
     private SecretKeyFactory secKeyFactory;
     private KeyFactory keyFactory;
+    private KeyAgreement keyAgreement;
+    private DHParameterSpec dhSpec;
+    private KeyPairGenerator keyPairGenerator;
+
+    private static final BigInteger G2048 = new BigInteger(
+        "29921856600312726725233783990862245500844977318481436463708787158053"
+        + "77467115448036145134085699794575169953367800738033395373714534478012"
+        + "38997334994761939046735532050792301435481780477259632834560815824829"
+        + "87865944507925876902318116864687612800046794048720512923467436091935"
+        + "51447149573305643559835039726944776944130993169353084317089130229776"
+        + "92663920407983317099464477375376556374741932689342986904165987179677"
+        + "88220898197447788494104043737106979614932136237837549595753633444959"
+        + "12883417634508652152797989038625331065651788508650985818751822124731"
+        + "51882329639419557750694932382824755364359901017619088709955837582398"
+        + "46390");
+    private static final BigInteger P2048 = new BigInteger(
+        "31264549318166531867496794807473238141433566771809815847049814274020"
+        + "05163271727770273721302685518597878750943052261821179926802000714112"
+        + "31421485890780606522846665768330062360819010369111884370353470845933"
+        + "92127470094806637074883324841802919100101385270091934681784803438875"
+        + "62123322167195720477951820617476155964519726598021984585347233205156"
+        + "44583288928898374740261143293397325572959009034187560158849399849537"
+        + "85268183285621880561011390630694514604422793454738005834016173550272"
+        + "09042859026074252892315501775316088371091609217985095505147483138286"
+        + "55932825290965877372882317184132366821847106726645935649138663776244"
+        + "00503");
 
     public CryptoHandler() {
         Security.addProvider(new BouncyCastleProvider());
 
         try {
+
             this.keyFactory = KeyFactory.getInstance("EC");
             this.hash = MessageDigest.getInstance("SHA256", "BC");
-            this.mac = Mac.getInstance("HMAC-SHA512", "BC");
+            this.mac = Mac.getInstance(HMAC, "BC");
             this.signature = Signature.getInstance("SHA256withECDSA", "BC");
             this.pwCipher =
                 Cipher.getInstance("PBEWITHSHA256AND192BITAES-CBC-BC", "BC");
             this.secKeyFactory = SecretKeyFactory.getInstance(
                 "PBEWITHSHA256AND192BITAES-CBC-BC", "BC");
+            this.keyAgreement = KeyAgreement.getInstance("DH", "BC");
+            this.dhSpec = new DHParameterSpec(G2048, P2048);
+            this.keyPairGenerator = KeyPairGenerator.getInstance("DH", "BC");
+            this.keyPairGenerator.initialize(dhSpec);
 
         } catch (NoSuchAlgorithmException e) {
             e.printStackTrace();
         } catch (NoSuchProviderException e) {
             e.printStackTrace();
         } catch (NoSuchPaddingException e) {
+            e.printStackTrace();
+        } catch (InvalidAlgorithmParameterException e) {
+            // TODO Auto-generated catch block
             e.printStackTrace();
         }
     }
@@ -112,24 +155,63 @@ public class CryptoHandler {
         return SHPEncryptedRequest.deserialize(pwCipher.doFinal(request));
     }
 
-    public byte[] signRequest(SHPSignedRequest request, byte[] password,
-                              byte[] salt, byte[] counter) throws Exception {
-        System.out.println("client pw: " + Utils.bytesToHex(password));
+    public byte[] signRequest(SHPSignedRequest request, PrivateKey privKey)
+        throws Exception {
 
-        String pwHex = Utils.bytesToHex(password);
-        PBEKeySpec pwSpec = new PBEKeySpec(pwHex.toCharArray());
-        Key sKey = secKeyFactory.generateSecret(pwSpec);
-        String counterStr = Utils.bytesToHex(counter);
-        BigInteger counterInt = new BigInteger(counterStr, 16);
-
-        // TODO FIX COUNTER
-        pwCipher.init(Cipher.ENCRYPT_MODE, sKey,
-                      new PBEParameterSpec(salt, 2048));
-
-        return pwCipher.doFinal(request.serialize());
+        signature.initSign(privKey, new SecureRandom());
+        byte[] req = request.serialize();
+        signature.update(req);
+        return signature.sign();
     }
 
-    public void signRequest() {}
+    public byte[] generateDHPubKey()
+        throws Exception {
+        return keyPairGenerator.generateKeyPair().getPublic().getEncoded();
+    }
+
+    public byte[] generateDHKey(PrivateKey privKey, PublicKey pubKey)
+        throws Exception {
+        return keyAgreement.generateSecret();
+    }
+
+    public byte[] authenticateRequest(byte[] pwHash, byte[] pbe,
+                                      byte[] ydhClient, byte[] sig)
+        throws Exception {
+
+        Key key = new SecretKeySpec(pwHash, HMAC);
+        mac.init(key);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        baos.write(pbe);
+        baos.write(ydhClient);
+        baos.write(sig);
+        byte[] data = baos.toByteArray();
+        mac.update(data);
+
+        return mac.doFinal();
+    }
+
+    public boolean validateAuth(byte[] pwHash, byte[] pbe, byte[] ydhClient,
+                                byte[] sig, byte[] authCode) throws Exception {
+
+        Key key = new SecretKeySpec(pwHash, HMAC);
+        mac.init(key);
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        baos.write(pbe);
+        baos.write(ydhClient);
+        baos.write(sig);
+        byte[] data = baos.toByteArray();
+        mac.update(data);
+
+        return MessageDigest.isEqual(authCode, mac.doFinal());
+    }
+
+    public boolean validateSignature(SHPSignedRequest request, byte[] sig,
+                                     PublicKey pubKey) throws Exception {
+
+        signature.initVerify(pubKey);
+        signature.update(request.serialize());
+        return signature.verify(sig);
+    }
 
     public boolean validatePassword(byte[] received, byte[] expected) {
         return MessageDigest.isEqual(received, expected);
@@ -148,321 +230,4 @@ public class CryptoHandler {
 
         return nonces;
     }
-
-    // private final CryptoConfig config;
-    // private Cipher cipher;
-    // private Mac MAC;
-    // private GMac GMAC;
-    // private MessageDigest hash;
-    // private SecretKey key;
-    // private IvParameterSpec ivSpec;
-    //
-    // public CryptoHandler() {
-    // this.config = new CryptoConfig("cryptoconfig.txt");
-    // init();
-    // }
-    //
-    // public CryptoHandler(String configfile) {
-    // this.config = new CryptoConfig(configfile);
-    // init();
-    // }
-    //
-    // @SuppressWarnings("deprecation")
-    // private void init() {
-    // Security.addProvider(new BouncyCastleProvider());
-    // Cipher ciphersuite;
-    //
-    // try {
-    // ciphersuite = Cipher.getInstance(config.getConfidentiality(), "BC");
-    // } catch (NoSuchAlgorithmException e) {
-    // ciphersuite = null;
-    // e.printStackTrace();
-    // } catch (NoSuchPaddingException e) {
-    // ciphersuite = null;
-    // e.printStackTrace();
-    // } catch (NoSuchProviderException e) {
-    // ciphersuite = null;
-    // e.printStackTrace();
-    // }
-    //
-    // this.cipher = ciphersuite;
-    //
-    // this.key = new SecretKeySpec(config.getSymmetricKeyBytes(),
-    // config.getConfidentiality().split("/")[0]);
-    //
-    // if (config.getIV() != null) {
-    // if (config.usesGCM()) {
-    // this.ivSpec = null;
-    // } else {
-    // this.ivSpec = new IvParameterSpec(config.getIVBytes());
-    // }
-    // } else {
-    // this.ivSpec = null;
-    // }
-    //
-    // MessageDigest hash = null;
-    // try {
-    // if (config.usesMAC()) {
-    // if (config.usesGMAC()) {
-    // if (config.getMAC().toUpperCase().contains("AES")) {
-    // this.GMAC =
-    // new GMac(new GCMBlockCipher(new AESEngine()));
-    // } else if (config.getMAC().toUpperCase().contains("RC6")) {
-    // this.GMAC =
-    // new GMac(new GCMBlockCipher(new RC6Engine()));
-    // } else {
-    // throw new IllegalArgumentException("Unsupported GMAC");
-    // }
-    // } else {
-    // SecretKey macKey = new SecretKeySpec(
-    // config.getMACKeyBytes(), config.getMAC());
-    //
-    // this.MAC = Mac.getInstance(config.getMAC());
-    // this.MAC.init(macKey);
-    // }
-    // } else {
-    // hash = MessageDigest.getInstance(config.getHashFunction());
-    // }
-    // } catch (Exception e) {
-    // e.printStackTrace();
-    // }
-    //
-    // this.hash = hash;
-    // }
-    //
-    // public byte[] generateHash(byte[] data, short seqNr) {
-    // if (config.usesMAC()) {
-    // if (config.usesGMAC()) {
-    // KeyParameter keyParam =
-    // new KeyParameter(config.getSymmetricKeyBytes());
-    // ParametersWithIV params =
-    // new ParametersWithIV(keyParam, generateIVBytes(seqNr));
-    //
-    // GMAC.init(params);
-    //
-    // GMAC.update(data, 0, data.length);
-    //
-    // byte[] gmac = new byte[GMAC.getMacSize()];
-    // GMAC.doFinal(gmac, 0);
-    //
-    // return gmac;
-    // }
-    //
-    // return MAC.doFinal(data);
-    // }
-    //
-    // return hash.digest(data);
-    // }
-    //
-    // public boolean validateHash(byte[] hash, byte[] otherHash) {
-    // return MessageDigest.isEqual(hash, otherHash);
-    // }
-    //
-    // public int getHashLength() {
-    // if (config.usesMAC()) {
-    // if (config.usesGMAC()) {
-    // return GMAC.getMacSize();
-    // }
-    // return MAC.getMacLength();
-    // }
-    //
-    // return hash.getDigestLength();
-    // }
-    //
-    // private GCMParameterSpec generateGCMSpec(short seqNr) {
-    // return new GCMParameterSpec(config.getIVSize() * 8,
-    // generateIVBytes(seqNr));
-    // }
-    //
-    // private IvParameterSpec generateIVSpec(short seqNr) {
-    // return new IvParameterSpec(generateIVBytes(seqNr));
-    // }
-    //
-    // private byte[] generateIVBytes(short seqNr) {
-    //
-    // byte[] newIV = new byte[config.getIVSize()];
-    // System.arraycopy(config.getIVBytes(), 0, newIV, 0, 4);
-    //
-    // for (int i = 11; i >= 4; i--) {
-    // newIV[i] = (byte)(seqNr & 0xFF);
-    // seqNr >>>= 8;
-    // }
-    //
-    // return newIV;
-    // }
-    //
-    // public byte[] encrypt(byte[] data, short seqNr) throws Exception {
-    // if (this.ivSpec != null) {
-    // if (config.usesChaCha()) {
-    // this.ivSpec = generateIVSpec(seqNr);
-    // }
-    // cipher.init(Cipher.ENCRYPT_MODE, key, ivSpec);
-    // } else if (config.usesGCM()) {
-    // cipher.init(Cipher.ENCRYPT_MODE, key, generateGCMSpec(seqNr));
-    // } else {
-    // cipher.init(Cipher.ENCRYPT_MODE, key);
-    // }
-    //
-    // return cipher.doFinal(data);
-    // }
-    //
-    // public byte[] decrypt(byte[] data, short seqNr) throws Exception {
-    // if (this.ivSpec != null) {
-    // if (config.usesChaCha()) {
-    // this.ivSpec = generateIVSpec(seqNr);
-    // }
-    // cipher.init(Cipher.DECRYPT_MODE, key, ivSpec);
-    // } else if (config.usesGCM()) {
-    // cipher.init(Cipher.DECRYPT_MODE, key, generateGCMSpec(seqNr));
-    // } else {
-    // cipher.init(Cipher.DECRYPT_MODE, key);
-    // }
-    //
-    // return cipher.doFinal(data);
-    // }
-    //
-    // public String summary() { return config.summary(); }
-    //
-    // @Override
-    // public String toString() {
-    // return config.toString();
-    // }
-    //
-    // private class CryptoConfig {
-    // private String confidentiality; // ALG/MODE/PADDING
-    // private String symmetricKey; // in hex
-    // private int symmetricKeySize; // in bits
-    // private Integer IVSize; // int or NULL
-    // private String IV; // hex or NULL
-    // private String integrity; // HMAC or H
-    // private String hashFunction; // secure hash func or NULL
-    // private String MAC; // HMAC or CMAC
-    // private String MACKey; // in hex or NULL
-    // private Integer MACKeySize; // in bits
-    //
-    // // default config name
-    // private CryptoConfig() { parseCryptoConfigFile("cryptoconfig.txt"); }
-    //
-    // private CryptoConfig(String filename) {
-    // parseCryptoConfigFile(filename);
-    // }
-    //
-    // // professor, can we use a .props file next time? :(
-    // private void parseCryptoConfigFile(String filename) {
-    // try (BufferedReader reader =
-    // new BufferedReader(new FileReader(filename))) {
-    // String line;
-    // while ((line = reader.readLine()) != null) {
-    // final String[] parts = line.split(":", 2);
-    // final String key = parts[0].trim();
-    // final String value = parts[1].trim();
-    //
-    // switch (key) {
-    // case "CONFIDENTIALITY":
-    // this.confidentiality = value;
-    // break;
-    // case "SYMMETRIC_KEY":
-    // this.symmetricKey = value;
-    // break;
-    // case "SYMMETRIC_KEY_SIZE":
-    // this.symmetricKeySize = Integer.parseInt(value);
-    // break;
-    // case "IV_SIZE":
-    // this.IVSize = value.equals("NULL")
-    // ? null
-    // : Integer.parseInt(value);
-    // break;
-    // case "IV":
-    // this.IV = value.equals("NULL") ? null : value;
-    // break;
-    // case "INTEGRITY":
-    // this.integrity = value;
-    // break;
-    // case "H":
-    // this.hashFunction = value.equals("NULL") ? null : value;
-    // break;
-    // case "MAC":
-    // this.MAC = value;
-    // break;
-    // case "MACKEY":
-    // this.MACKey = value.equals("NULL") ? null : value;
-    // break;
-    // case "MACKEY_SIZE":
-    // this.MACKeySize = value.equals("NULL")
-    // ? null
-    // : Integer.parseInt(value);
-    // break;
-    // }
-    // }
-    // } catch (final IOException e) {
-    // throw new RuntimeException("Error reading " + filename, e);
-    // }
-    // }
-    //
-    // public boolean usesMAC() {
-    // return "HMAC".equals(this.integrity.toUpperCase()) ||
-    // "CMAC".equals(this.integrity.toUpperCase());
-    // }
-    //
-    // public boolean usesGMAC() {
-    // return this.MAC.toUpperCase().contains("GMAC");
-    // }
-    //
-    // public boolean usesGCM() {
-    // return this.confidentiality.toUpperCase().contains("GCM");
-    // }
-    //
-    // public boolean usesChaCha() {
-    // return this.confidentiality.toUpperCase().contains("CHACHA");
-    // }
-    //
-    // public String getConfidentiality() { return this.confidentiality; }
-    //
-    // public String getSymmetricKey() { return this.symmetricKey; }
-    //
-    // public byte[] getSymmetricKeyBytes() {
-    // return Utils.hexToBytes(this.symmetricKey);
-    // }
-    //
-    // public int getSymmetricKeySize() { return this.symmetricKeySize; }
-    //
-    // public int getIVSize() { return this.IVSize; }
-    //
-    // public String getIV() { return this.IV; }
-    //
-    // public byte[] getIVBytes() { return Utils.hexToBytes(this.IV); }
-    //
-    // public String getIntegrity() { return this.integrity; }
-    //
-    // public String getHashFunction() { return this.hashFunction; }
-    //
-    // public String getMAC() { return this.MAC; }
-    //
-    // public String getMACKey() { return this.MACKey; }
-    //
-    // public byte[] getMACKeyBytes() { return Utils.hexToBytes(this.MACKey); }
-    //
-    // public int getMACKeySize() { return this.MACKeySize; }
-    //
-    // public String summary() {
-    // return confidentiality + " | " + integrity + " | " +
-    // (usesMAC() ? MAC : hashFunction) + "\n";
-    // }
-    //
-    // @Override
-    // public String toString() {
-    // return "CryptoConfig [" +
-    // "\n CONFIDENTIALITY = " + confidentiality +
-    // "\n SYMMETRIC_KEY = " + symmetricKey +
-    // "\n SYMMETRIC_KEY_SIZE = " + symmetricKeySize +
-    // "\n IV_SIZE = " + IVSize +
-    // "\n IV = " + IV +
-    // "\n INTEGRITY = " + integrity +
-    // "\n H = " + hashFunction +
-    // "\n MAC = " + MAC +
-    // "\n MACKEY = " + MACKey +
-    // "\n MACKEY_SIZE = " + MACKeySize +
-    // "\n]";
-    // }
-    // }
 }

@@ -11,6 +11,7 @@ import java.io.OutputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.nio.ByteBuffer;
+import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.util.HashMap;
 import java.util.Map;
@@ -23,6 +24,7 @@ public class SHPServer {
     InputStream in;
     OutputStream out;
     int port;
+    ServerECC serverECC;
 
     public SHPServer() { this(3333); }
 
@@ -33,6 +35,7 @@ public class SHPServer {
         parseUserDB();
 
         try {
+            this.serverECC = parseServerECC();
             this.serverSock = new ServerSocket(port);
             this.sock = serverSock.accept();
             this.in = sock.getInputStream();
@@ -71,12 +74,13 @@ public class SHPServer {
             var oos = new ObjectOutputStream(out);
             SHPPacket packet = prepareMessage2(salt, counter, chall);
             oos.writeObject(packet);
+            byte[] ydhServer = cryptoHandler.generateDHPubKey();
+            System.out.println("\n\nydhserver: " + Utils.bytesToHex(ydhServer));
 
             // ---------------- MSG3 ----------------
             SHPPayload.Type3 payload3 = processMessage3(ois);
-            SHPEncryptedRequest request = cryptoHandler.decryptRequest(
-                payload3.PBE, user.getPasswordHash(), salt, counter);
-            validateRequest(request.body);
+            SHPEncryptedRequest request =
+                validateRequest(user, payload3, salt, counter);
 
             ois.close();
             oos.close();
@@ -87,12 +91,32 @@ public class SHPServer {
         }
     }
 
-    private void validateRequest(String request) throws FileNotFoundException {
-        if (request.equals("cars.dat") || request.equals("monsters.dat")) {
-            return;
+    private SHPEncryptedRequest validateRequest(UserData user,
+                                                SHPPayload.Type3 payload3,
+                                                byte[] salt, byte[] counter)
+        throws Exception {
+        boolean validAuth = cryptoHandler.validateAuth(
+            user.getPasswordHash(), payload3.PBE, payload3.ydhClient,
+            payload3.signature, payload3.authCode);
+        if (!validAuth) {
+            throw new IllegalAccessException();
+        }
+        SHPEncryptedRequest request = cryptoHandler.decryptRequest(
+            payload3.PBE, user.getPasswordHash(), salt, counter);
+        SHPSignedRequest sigReq =
+            SHPSignedRequest.fromEncryptedRequest(request, payload3.ydhClient);
+        boolean validSign = cryptoHandler.validateSignature(
+            sigReq, payload3.signature, user.getPublicKey());
+
+        if (!validSign) {
+            throw new IllegalAccessException();
+        }
+        if (!(request.body.equals("cars.dat") ||
+              request.body.equals("monsters.dat"))) {
+            throw new FileNotFoundException(request.body);
         }
 
-        throw new FileNotFoundException(request);
+        return request;
     }
 
     private SHPPayload.Type1 processMessage1(ObjectInputStream ois)
@@ -144,7 +168,8 @@ public class SHPServer {
                 final String userID = fields[0].trim();
                 final byte[] pwHash = Utils.hexToBytes(fields[1].trim());
                 final byte[] salt = Utils.hexToBytes(fields[2].trim());
-                final PublicKey key = cryptoHandler.parsePublicKeyHex(fields[3].trim());
+                final PublicKey key =
+                    cryptoHandler.parsePublicKeyHex(fields[3].trim());
 
                 userDB.put(userID, new UserData(pwHash, salt, key));
             }
@@ -179,6 +204,53 @@ public class SHPServer {
 
             return "UserData [passwordHash = " + passwordHash +
                 " | salt = " + salt + " | publicKey = " + publicKey + "]";
+        }
+    }
+
+    private ServerECC parseServerECC() {
+        try (BufferedReader reader =
+                 new BufferedReader(new FileReader("ServerECCKeyPair.sec"))) {
+            String curve = reader.readLine().split(":")[1].trim();
+
+            String privKeyHex = reader.readLine().split(":")[1].trim();
+            PrivateKey privKey = cryptoHandler.parsePrivateKeyHex(privKeyHex);
+
+            String pubKeyHex = reader.readLine().split(":")[1].trim();
+            PublicKey pubKey = cryptoHandler.parsePublicKeyHex(pubKeyHex);
+
+            return new ServerECC(curve, privKey, pubKey);
+
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    private class ServerECC {
+        String curve;
+        PublicKey publicKey;
+        PrivateKey privateKey;
+
+        public ServerECC(String curve, PrivateKey privKey, PublicKey pubKey) {
+            this.curve = curve;
+            this.privateKey = privKey;
+            this.publicKey = pubKey;
+        }
+
+        public String getCurve() { return curve; }
+
+        public PublicKey getPublicKey() { return publicKey; }
+
+        public PrivateKey getPrivateKey() { return privateKey; }
+
+        @Override
+        public String toString() {
+            String privateKey = Utils.bytesToHex(this.privateKey.getEncoded());
+            String publicKey = Utils.bytesToHex(this.publicKey.getEncoded());
+
+            return "ServerECC [curve = " + this.curve +
+                " | privateKey = " + privateKey +
+                " | publicKey = " + publicKey + "]";
         }
     }
 }

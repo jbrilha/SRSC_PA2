@@ -55,13 +55,13 @@ public class SHPPayload implements Serializable {
         public byte[] PBE;
         public byte[] signature;
         public byte[] ydhClient;
-        public byte[] hash;
+        public byte[] authCode;
 
-        public Type3(byte[] pbe, byte[] signature, byte[] ydhClient) {
+        public Type3(byte[] pbe, byte[] ydhClient, byte[] signature, byte[] authCode) {
             this.PBE = pbe;
-            this.signature = signature;
             this.ydhClient = ydhClient;
-            this.hash = new byte[16];
+            this.signature = signature;
+            this.authCode = authCode;
         }
 
         @Override
@@ -69,7 +69,7 @@ public class SHPPayload implements Serializable {
             return "Payload [PBE = " + new String(PBE) +
                 ", signature = " + new String(signature) +
                 ", ydhClient = " + new String(ydhClient) +
-                ", hash = " + new String(hash) + "]";
+                ", authCode = " + new String(authCode) + "]";
         }
     }
 
