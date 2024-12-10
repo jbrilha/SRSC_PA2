@@ -8,6 +8,9 @@ import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
+import java.util.Arrays;
+import javax.crypto.Mac;
+import javax.crypto.spec.SecretKeySpec;
 
 public class CryptoConfig implements Serializable {
     private String confidentiality; // ALG/MODE/PADDING
@@ -48,7 +51,7 @@ public class CryptoConfig implements Serializable {
                     break;
                 case "IV_SIZE":
                     this.IVSize =
-                        value.equals("NULL") ? null : Integer.parseInt(value);
+                        value.equals("NULL") ? 0 : Integer.parseInt(value);
                     break;
                 case "IV":
                     this.IV = value.equals("NULL") ? null : value;
@@ -67,12 +70,70 @@ public class CryptoConfig implements Serializable {
                     break;
                 case "MACKEY_SIZE":
                     this.MACKeySize =
-                        value.equals("NULL") ? null : Integer.parseInt(value);
+                        value.equals("NULL") ? 0 : Integer.parseInt(value);
                     break;
                 }
             }
         } catch (final IOException e) {
             throw new RuntimeException("Error reading " + filename, e);
+        }
+    }
+
+    public void setSymmetricKey(String symmetricKey) {
+        this.symmetricKey = symmetricKey;
+    }
+
+    public void setIV(String iV) { IV = iV; }
+
+    public void setMACKey(String mACKey) { MACKey = mACKey; }
+
+    //  from a couple of places
+    // https://www.javatips.net/api/keywhiz-master/hkdf/src/main/java/keywhiz/hkdf/Hkdf.java
+    // https://github.com/signalapp/libsignal-protocol-java/blob/master/java/src/main/java/org/whispersystems/libsignal/kdf/HKDF.java
+    // https://github.com/patrickfav/hkdf/blob/main/src/main/java/at/favre/lib/hkdf/HKDF.java 
+    // https://github.com/AdoptOpenJDK/openjdk-jdk11/blob/master/src/java.base/share/classes/sun/security/ssl/HKDF.java
+    private byte[] deriveBytes(Mac hkdf, byte[] secret, byte[] info, int length)
+        throws Exception {
+        hkdf.init(new SecretKeySpec(secret, "HmacSHA256"));
+        byte[] pseudoRand = hkdf.doFinal(new byte[32]);
+
+        hkdf.init(new SecretKeySpec(pseudoRand, "HmacSHA256"));
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        byte[] prev = new byte[0];
+        byte counter = 1;
+
+        while (output.size() < length) {
+            hkdf.reset();
+            hkdf.update(prev);
+            hkdf.update(info);
+            hkdf.update(counter++);
+            prev = hkdf.doFinal();
+            output.write(prev);
+        }
+
+        return Arrays.copyOf(output.toByteArray(), length);
+    }
+
+    public void deriveKeysFromSecret(byte[] secretKey) throws Exception {
+        Mac hkdf = Mac.getInstance("HmacSHA256", "BC");
+
+        int symKeySize = this.getSymmetricKeySize();
+        byte[] symKeyInfo = "SYMMETRIC_KEY".getBytes();
+        setSymmetricKey(Utils.bytesToHex(
+            deriveBytes(hkdf, secretKey, symKeyInfo, symKeySize / 8)));
+
+        int ivSize = this.getIVSize();
+        if (ivSize > 0) {
+            byte[] ivInfo = "IV".getBytes();
+            setIV(
+                Utils.bytesToHex(deriveBytes(hkdf, secretKey, ivInfo, ivSize)));
+        }
+
+        int macKeySize = this.getMACKeySize();
+        if (macKeySize > 0) {
+            byte[] macKeyInfo = "MAC_KEY".getBytes();
+            setMACKey(Utils.bytesToHex(
+                deriveBytes(hkdf, secretKey, macKeyInfo, macKeySize / 8)));
         }
     }
 
