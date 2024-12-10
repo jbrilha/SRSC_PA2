@@ -1,64 +1,62 @@
 package StreamingService.hjStreamServer; // PA1: added package declaration for easier compilation
 
 /*
- * hjStreamServer.java
- * Streaming server: emitter of video streams (movies)
- * Can send in unicast or multicast IP for client listeners
- * that can play in real time the transmitted movies
- */
+* hjStreamServer.java 
+* Streaming server: emitter of video streams (movies)
+* Can send in unicast or multicast IP for client listeners
+* that can play in real time the transmitted movies
+*/
 
-import DSTP.DSTPDatagramSocket; // PA1: added import
-import SHP.*;
 import java.io.*;
 import java.net.*;
 
+import DSTP.DSTPDatagramSocket; // PA1: added import
+import SHP.*; // PA2: added import
+
 class hjStreamServer {
 
-    static public void main(String[] args) throws Exception {
+	static public void main( String []args ) throws Exception {
+        // PA2: remove argument count checking
         SHPServer sc = new SHPServer();
         try {
-            SHPRequest request = sc.handshake();
+            SHPRequest request = sc.handshake(); // PA2: SHP handshake
             String filename =
                 "StreamingService/hjStreamServer/movies/" + request.body;
 
             String host = sc.sock.getInetAddress().getHostAddress();
             int port = request.udp_port;
-            System.out.println(request);
 
-
-            DataInputStream g =
-                new DataInputStream(new FileInputStream(filename));
             int size;
             int count = 0;
             long time;
+            DataInputStream g = new DataInputStream( new FileInputStream(filename) ); // PA2: use filename from SHP client request
             byte[] buff = new byte[65000];
-            DSTPDatagramSocket s =
-                new DSTPDatagramSocket(request.config); // PA1: changed socket class
-            InetSocketAddress addr = new InetSocketAddress(host, port);
-            DatagramPacket p = new DatagramPacket(buff, buff.length, addr);
+            DSTPDatagramSocket s = new DSTPDatagramSocket(request.config); // PA1: changed socket class | PA2: use cryptoconfig from SHP
+            InetSocketAddress addr =
+                new InetSocketAddress(host, port); // PA2: use new host and port from SHP
+            DatagramPacket p=new DatagramPacket(buff,buff.length,addr);
             long t0 = System.nanoTime(); // tempo de referencia
             long q0 = 0;
 
-            while (g.available() > 0) {
+            while ( g.available() > 0 ) {
                 size = g.readShort();
                 time = g.readLong();
-                if (count == 0)
-                    q0 = time; // tempo de referencia no stream
+                if ( count == 0 ) q0 = time; // tempo de referencia no stream
                 count += 1;
-                g.readFully(buff, 0, size);
-                p.setData(buff, 0, size);
-                p.setSocketAddress(addr);
+                g.readFully(buff, 0, size );
+                p.setData(buff, 0, size );
+                p.setSocketAddress( addr );
                 long t = System.nanoTime();
-                Thread.sleep(Math.max(0, ((time - q0) - (t - t0)) / 1000000));
-                s.send(p);
-                // System.out.print( "." );
+                Thread.sleep( Math.max(0, ((time-q0)-(t-t0))/1000000) );
+                s.send( p );
+                //System.out.print( "." );
             }
-            s.close();
-            g.close();
 
-            System.out.println("\nEND ! packets with frames sent: " + count);
-        } catch (IllegalAccessException e) {
+            System.out.println("\nEND ! packets with frames sent: "+count);
+        } catch (Exception e) { // PA2: catch exception from SHP handshake
             e.printStackTrace();
+            return;
         }
-    }
+	}
+
 }
