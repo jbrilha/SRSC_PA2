@@ -9,7 +9,7 @@ public class TFTPServer {
 
 	public static void main(String argv[]) {
 		try {
-            int tcp_port = argv[0] == null ? 3333 : Integer.parseInt(argv[0]); // PA2: default 3333 or parse arg
+            int tcp_port = (argv.length == 0 || argv[0] == null) ? 3333 : Integer.parseInt(argv[0]); // PA2: default 3333 or parse arg
             while(true) { // PA2: move while here to handshake w every new client
                             // means the ciphersuite can be different for each client, which is neat :)
                 SHPServer sc = new SHPServer(tcp_port);
