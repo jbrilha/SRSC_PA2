@@ -17,7 +17,7 @@ public class SHPPayload implements Serializable {
 
         @Override
         public String toString() {
-            return "Payload [userId = " + getUserId() + "]";
+            return "Payload.Type1 [userId = " + getUserId() + "]";
         }
     }
 
@@ -34,7 +34,7 @@ public class SHPPayload implements Serializable {
 
         @Override
         public String toString() {
-            return "Payload [salt = " + Utils.bytesToHex(salt) +
+            return "Payload.Type2 [salt = " + Utils.bytesToHex(salt) +
                 ", counter = " + Utils.bytesToHex(counter) +
                 ", chall = " + Utils.bytesToHex(chall) + "]";
         }
@@ -56,7 +56,7 @@ public class SHPPayload implements Serializable {
 
         @Override
         public String toString() {
-            return "Payload [pbe = " + Utils.bytesToHex(pbe) +
+            return "Payload.Type3 [pbe = " + Utils.bytesToHex(pbe) +
                 ", ydhClient = " + Utils.bytesToHex(ydhClient) +
                 ", signature = " + Utils.bytesToHex(signature) +
                 ", authCode = " + Utils.bytesToHex(authCode) + "]";
@@ -79,9 +79,25 @@ public class SHPPayload implements Serializable {
 
         @Override
         public String toString() {
-            return "Payload [envelope = " + Utils.bytesToHex(envelope) +
+            return "Payload.Type4 [envelope = " + Utils.bytesToHex(envelope) +
                 ", ydhServer = " + Utils.bytesToHex(ydhServer) +
                 ", signature = " + Utils.bytesToHex(signature) +
+                ", authCode = " + Utils.bytesToHex(authCode) + "]";
+        }
+    }
+
+    public static class Type5 extends SHPPayload {
+        public byte[] greenlight;
+        public byte[] authCode;
+
+        public Type5(byte[] greenlight, byte[] authCode) {
+            this.greenlight = greenlight;
+            this.authCode = authCode;
+        }
+
+        @Override
+        public String toString() {
+            return "Payload.Type5 [greenlight = " + Utils.bytesToHex(greenlight) +
                 ", authCode = " + Utils.bytesToHex(authCode) + "]";
         }
     }

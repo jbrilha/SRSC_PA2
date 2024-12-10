@@ -25,7 +25,9 @@ public class SHPServer {
     int port;
     ECConfig serverECC;
 
-    public SHPServer() { this(3333); }
+    public SHPServer() {
+        this(3333);
+    }
 
     public SHPServer(int port) {
         this.cryptoHandler = new CryptoHandler();
@@ -34,8 +36,7 @@ public class SHPServer {
         parseUserDB();
 
         try {
-            this.serverECC =
-                ECConfig.parseConfigFile("ServerECCKeyPair.sec", cryptoHandler);
+            this.serverECC = ECConfig.parseConfigFile("ServerECCKeyPair.sec", cryptoHandler);
             this.serverSock = new ServerSocket(port);
             this.sock = serverSock.accept();
             this.in = sock.getInputStream();
@@ -56,7 +57,7 @@ public class SHPServer {
             UserData user = userDB.get(userID);
             if (user == null) {
                 throw new IllegalAccessException(
-                    "User is not registered in the system");
+                        "User is not registered in the system");
             }
             System.out.println(user);
 
@@ -76,20 +77,23 @@ public class SHPServer {
 
             // ---------------- MSG3 ----------------
             SHPPayload.Type3 payload3 = processMessage3(ois);
-            SHPEncryptedRequest request =
-                validateRequest(user, payload3, salt, counter);
+            SHPEncryptedRequest request = validateRequest(user, payload3, salt, counter);
 
             // ---------------- MSG4 ----------------
             CryptoConfig cc = new CryptoConfig();
             packet = prepareMessage4(request, user, cc);
             oos.writeObject(packet);
 
-            String oi = (String)ois.readObject();
-            System.out.println(oi);
+            byte[] secretKey = cryptoHandler.generateSharedSecret(payload3.ydhClient);
+            System.out.println("ks: " + Utils.bytesToHex(secretKey));
+            // ---------------- MSG5 ----------------
+            SHPPayload.Type5 payload5 = processMessage5(ois);
+            validateGreenlight(secretKey, payload5);
 
             ois.close();
             oos.close();
             destroy();
+            cc.deriveKeysFromSecret(secretKey);
             SHPRequest req = new SHPRequest(request.body, cc, request.udp_port);
             return req;
         } catch (Exception e) {
@@ -98,18 +102,40 @@ public class SHPServer {
         }
     }
 
+    private boolean validateGreenlight(byte[] secretKey,
+            SHPPayload.Type5 payload5)
+            throws Exception {
+        boolean validAuth = cryptoHandler.validateGreenlight(
+                secretKey, payload5.greenlight, payload5.authCode);
+        if (!validAuth) {
+            throw new IllegalAccessException();
+        }
+
+        return validAuth;
+    }
+
     private SHPPayload.Type1 processMessage1(ObjectInputStream ois)
-        throws Exception {
-        SHPPacket packet = (SHPPacket)ois.readObject();
-        SHPPayload.Type1 payload1 = (SHPPayload.Type1)packet.getPayload();
+            throws Exception {
+        SHPPacket packet = (SHPPacket) ois.readObject();
+        SHPPayload.Type1 payload1 = (SHPPayload.Type1) packet.getPayload();
         // TODO check header msg type
         // header = packet.getHeader();
         System.out.println("rec msg1: " + packet + "\n");
         return payload1;
     }
 
+    private SHPPayload.Type5 processMessage5(ObjectInputStream ois)
+            throws Exception {
+        SHPPacket packet = (SHPPacket) ois.readObject();
+        SHPPayload.Type5 payload5 = (SHPPayload.Type5) packet.getPayload();
+        // TODO check header msg type
+        // header = packet.getHeader();
+        System.out.println("rec msg5: " + packet + "\n");
+        return payload5;
+    }
+
     private SHPPacket prepareMessage2(byte[] salt, byte[] counter, byte[] chall)
-        throws Exception {
+            throws Exception {
         SHPHeader header = new SHPHeader(0x2, 0x1, 0x2);
         SHPPayload.Type2 payload2 = new SHPPayload.Type2(salt, counter, chall);
         SHPPacket packet = new SHPPacket(header, payload2);
@@ -118,17 +144,18 @@ public class SHPServer {
     }
 
     private SHPPayload.Type3 processMessage3(ObjectInputStream ois)
-        throws Exception {
-        SHPPacket packet = (SHPPacket)ois.readObject();
-        SHPPayload.Type3 payload3 = (SHPPayload.Type3)packet.getPayload();
+            throws Exception {
+        SHPPacket packet = (SHPPacket) ois.readObject();
+        SHPPayload.Type3 payload3 = (SHPPayload.Type3) packet.getPayload();
         // TODO check header msg type
         // header = packet.getHeader();
         System.out.println("rec msg3: " + packet + "\n");
         return payload3;
     }
 
-    private SHPPacket prepareMessage4(SHPEncryptedRequest req, UserData user, CryptoConfig cryptoConfig)
-        throws Exception {
+    private SHPPacket prepareMessage4(SHPEncryptedRequest req, UserData user,
+            CryptoConfig cryptoConfig)
+            throws Exception {
         byte[] ydhServer = cryptoHandler.generateDHPubKey();
         // TODO
         byte[] nonce4plus1 = req.nonce4;
@@ -137,20 +164,17 @@ public class SHPServer {
         // System.out.println("\n\nydhserver: " +
         String confirmation = "nice";
         SHPEncryptedConfirmation encConf = new SHPEncryptedConfirmation(
-            confirmation, nonce4plus1, nonce5, config);
-        byte[] encEnvelope =
-            cryptoHandler.encryptConfirmation(encConf, user.getPublicKey());
+                confirmation, nonce4plus1, nonce5, config);
+        byte[] encEnvelope = cryptoHandler.encryptConfirmation(encConf, user.getPublicKey());
 
         SHPSignedConfirmation sigConf = new SHPSignedConfirmation(
-            confirmation, user.getUserID(), nonce4plus1, config, ydhServer);
-        byte[] sig =
-            cryptoHandler.signConfirmation(sigConf, serverECC.getPrivateKey());
+                confirmation, user.getUserID(), nonce4plus1, config, ydhServer);
+        byte[] sig = cryptoHandler.signConfirmation(sigConf, serverECC.getPrivateKey());
 
-        byte[] authCode = cryptoHandler.authenticateRequest(
-            user.getPasswordHash(), encEnvelope, ydhServer, sig);
+        byte[] authCode = cryptoHandler.authenticate(
+                user.getPasswordHash(), encEnvelope, ydhServer, sig);
         SHPHeader header = new SHPHeader(0x2, 0x1, 0x4);
-        SHPPayload.Type4 payload4 =
-            new SHPPayload.Type4(encEnvelope, ydhServer, sig, authCode);
+        SHPPayload.Type4 payload4 = new SHPPayload.Type4(encEnvelope, ydhServer, sig, authCode);
         SHPPacket packet = new SHPPacket(header, payload4);
         System.out.println("sent msg4: " + packet + "\n");
         return packet;
@@ -168,27 +192,26 @@ public class SHPServer {
     }
 
     private SHPEncryptedRequest validateRequest(UserData user,
-                                                SHPPayload.Type3 payload3,
-                                                byte[] salt, byte[] counter)
-        throws Exception {
+            SHPPayload.Type3 payload3,
+            byte[] salt, byte[] counter)
+            throws Exception {
         boolean validAuth = cryptoHandler.validateAuth(
-            user.getPasswordHash(), payload3.pbe, payload3.ydhClient,
-            payload3.signature, payload3.authCode);
+                user.getPasswordHash(), payload3.pbe, payload3.ydhClient,
+                payload3.signature, payload3.authCode);
         if (!validAuth) {
             throw new IllegalAccessException();
         }
         SHPEncryptedRequest request = cryptoHandler.decryptRequest(
-            payload3.pbe, user.getPasswordHash(), salt, counter);
-        SHPSignedRequest sigReq =
-            SHPSignedRequest.fromEncryptedRequest(request, payload3.ydhClient);
+                payload3.pbe, user.getPasswordHash(), salt, counter);
+        SHPSignedRequest sigReq = SHPSignedRequest.fromEncryptedRequest(request, payload3.ydhClient);
         boolean validSign = cryptoHandler.validateSignature(
-            sigReq, payload3.signature, user.getPublicKey());
+                sigReq, payload3.signature, user.getPublicKey());
 
         if (!validSign) {
             throw new IllegalAccessException();
         }
         if (!(request.body.equals("cars.dat") ||
-              request.body.equals("monsters.dat"))) {
+                request.body.equals("monsters.dat"))) {
             throw new FileNotFoundException(request.body);
         }
 
@@ -196,16 +219,14 @@ public class SHPServer {
     }
 
     private void parseUserDB() {
-        try (BufferedReader reader =
-                 new BufferedReader(new FileReader("userdatabase.txt"))) {
+        try (BufferedReader reader = new BufferedReader(new FileReader("userdatabase.txt"))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 final String[] fields = line.split(":", 4);
                 final String userID = fields[0].trim();
                 final byte[] pwHash = Utils.hexToBytes(fields[1].trim());
                 final byte[] salt = Utils.hexToBytes(fields[2].trim());
-                final PublicKey key =
-                    cryptoHandler.parsePublicKeyHex(fields[3].trim());
+                final PublicKey key = cryptoHandler.parseECPublicKeyHex(fields[3].trim());
 
                 userDB.put(userID, new UserData(userID, pwHash, salt, key));
             }
@@ -222,20 +243,28 @@ public class SHPServer {
         PublicKey publicKey;
 
         public UserData(String userID, byte[] pwHash, byte[] salt,
-                        PublicKey key) {
+                PublicKey key) {
             this.userID = userID;
             this.passwordHash = pwHash;
             this.salt = salt;
             this.publicKey = key;
         }
 
-        public String getUserID() { return userID; }
+        public String getUserID() {
+            return userID;
+        }
 
-        public byte[] getPasswordHash() { return passwordHash; }
+        public byte[] getPasswordHash() {
+            return passwordHash;
+        }
 
-        public byte[] getSalt() { return salt; }
+        public byte[] getSalt() {
+            return salt;
+        }
 
-        public PublicKey getPublicKey() { return publicKey; }
+        public PublicKey getPublicKey() {
+            return publicKey;
+        }
 
         @Override
         public String toString() {
@@ -244,8 +273,8 @@ public class SHPServer {
             String publicKey = Utils.bytesToHex(this.publicKey.getEncoded());
 
             return "UserData [userID = " + userID +
-                " | passwordHash = " + passwordHash + " | salt = " + salt +
-                " | publicKey = " + publicKey + "]";
+                    " | passwordHash = " + passwordHash + " | salt = " + salt +
+                    " | publicKey = " + publicKey + "]";
         }
     }
 }

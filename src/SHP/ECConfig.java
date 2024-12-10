@@ -23,10 +23,10 @@ public class ECConfig {
             String curve = reader.readLine().split(":")[1].trim();
 
             String privKeyHex = reader.readLine().split(":")[1].trim();
-            PrivateKey privKey = cryptoHandler.parsePrivateKeyHex(privKeyHex);
+            PrivateKey privKey = cryptoHandler.parseECPrivateKeyHex(privKeyHex);
 
             String pubKeyHex = reader.readLine().split(":")[1].trim();
-            PublicKey pubKey = cryptoHandler.parsePublicKeyHex(pubKeyHex);
+            PublicKey pubKey = cryptoHandler.parseECPublicKeyHex(pubKeyHex);
 
             return new ECConfig(curve, privKey, pubKey);
 

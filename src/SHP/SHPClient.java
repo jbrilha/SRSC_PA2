@@ -56,6 +56,7 @@ public class SHPClient {
             // ---------------- MSG3 ----------------
             packet =
                 prepareMessage3(userId, pwHash, filename, udp_port, payload2);
+            SHPPayload.Type3 payload3 = (SHPPayload.Type3)packet.getPayload();
             oos.writeObject(packet);
 
             // ---------------- MSG4 ----------------
@@ -63,15 +64,19 @@ public class SHPClient {
             SHPEncryptedConfirmation confirmation =
                 validateConfirmation(userId, pwHash, payload4);
             System.out.println(confirmation);
+            byte[] secretKey = cryptoHandler.generateSharedSecret(payload4.ydhServer);
 
             // ---------------- MSG5 ----------------
-            String oi = "oi";
-            oos.writeObject(oi);
+            packet =
+                prepareMessage5(confirmation.nonce5, secretKey);
+            oos.writeObject(packet);
 
             ois.close();
             oos.close();
             destroy();
-            return CryptoConfig.deserialize(confirmation.config);
+            CryptoConfig cc = CryptoConfig.deserialize(confirmation.config);
+            cc.deriveKeysFromSecret(secretKey);
+            return cc;
         } catch (Exception e) {
             e.printStackTrace();
             return null;
@@ -140,7 +145,7 @@ public class SHPClient {
             cryptoHandler.signRequest(sigReq, clientECC.getPrivateKey());
 
         byte[] authCode =
-            cryptoHandler.authenticateRequest(pwHash, pbe, ydhClient, sig);
+            cryptoHandler.authenticate(pwHash, pbe, ydhClient, sig);
 
         SHPHeader header = new SHPHeader(0x2, 0x1, 0x3);
         SHPPayload.Type3 payload3 =
@@ -160,6 +165,21 @@ public class SHPClient {
         return payload4;
     }
 
+    private SHPPacket prepareMessage5(byte[] nonce5, byte[] secretKey)
+        throws Exception {
+        // TODO
+        byte[] nonce5plus1 = CryptoHandler.generateNonces(1);
+        SHPHeader header = new SHPHeader(0x2, 0x1, 0x5);
+        byte[] greenlight = new SHPEncryptedGreenlight("GO", nonce5plus1).serialize();
+        byte[] authCode =
+            cryptoHandler.authenticateGreenlight(secretKey, greenlight);
+        SHPPayload.Type5 payload5 =
+            new SHPPayload.Type5(greenlight, authCode);
+        SHPPacket packet = new SHPPacket(header, payload5);
+        System.out.println("sent msg5: " + packet + "\n");
+        return packet;
+    }
+
     public void destroy() {
         try {
             in.close();
@@ -176,7 +196,7 @@ public class SHPClient {
             String curve = reader.readLine().split(":")[1].trim();
 
             String pubKeyHex = reader.readLine().split(":")[1].trim();
-            return cryptoHandler.parsePublicKeyHex(pubKeyHex);
+            return cryptoHandler.parseECPublicKeyHex(pubKeyHex);
         } catch (Exception e) {
             e.printStackTrace();
             return null;
