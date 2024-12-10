@@ -82,7 +82,6 @@ public class DSTPPayload {
 
     private boolean validateHash() {
         byte[] generatedHash = generateHash();
-        // System.out.println(Utils.bytesToHex(generatedHash));
         return cryptoHandler.validateHash(this.hash, generatedHash);
     }
 

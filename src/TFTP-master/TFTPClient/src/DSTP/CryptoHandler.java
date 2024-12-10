@@ -21,6 +21,7 @@ import org.bouncycastle.crypto.modes.GCMBlockCipher;
 import org.bouncycastle.crypto.params.KeyParameter;
 import org.bouncycastle.crypto.params.ParametersWithIV;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
+import SHP.CryptoConfig;
 
 /**
  * CryptoHandler
@@ -35,12 +36,12 @@ public class CryptoHandler {
     private IvParameterSpec ivSpec;
 
     public CryptoHandler() {
-        this.config = new CryptoConfig("cryptoconfig.txt");
+        this.config = new CryptoConfig("ciphersuite.conf");
         init();
     }
 
-    public CryptoHandler(String configfile) {
-        this.config = new CryptoConfig(configfile);
+    public CryptoHandler(CryptoConfig cc) {
+        this.config = cc;
         init();
     }
     
@@ -137,10 +138,7 @@ public class CryptoHandler {
 
     public int getHashLength() {
         if (config.usesMAC()) {
-            if (config.usesGMAC()) {
-                return GMAC.getMacSize();
-            }
-            return MAC.getMacLength();
+            return config.getMACKeySize() / 8;
         }
 
         return hash.getDigestLength();
@@ -203,144 +201,6 @@ public class CryptoHandler {
     @Override
     public String toString() {
         return config.toString();
-    }
-
-    private class CryptoConfig {
-        private String confidentiality; // ALG/MODE/PADDING
-        private String symmetricKey;    // in hex
-        private int symmetricKeySize;   // in bits
-        private Integer IVSize;         // int or NULL
-        private String IV;              // hex or NULL
-        private String integrity;       // HMAC or H
-        private String hashFunction;    // secure hash func or NULL
-        private String MAC;             // HMAC or CMAC
-        private String MACKey;          // in hex or NULL
-        private Integer MACKeySize;     // in bits
-
-        // default config name
-        private CryptoConfig() { parseCryptoConfigFile("cryptoconfig.txt"); }
-
-        private CryptoConfig(String filename) {
-            parseCryptoConfigFile(filename);
-        }
-
-        // professor, can we use a .props file next time? :(
-        private void parseCryptoConfigFile(String filename) {
-            try (BufferedReader reader =
-                     new BufferedReader(new FileReader(filename))) {
-                String line;
-                while ((line = reader.readLine()) != null) {
-                    final String[] parts = line.split(":", 2);
-                    final String key = parts[0].trim();
-                    final String value = parts[1].trim();
-
-                    switch (key) {
-                    case "CONFIDENTIALITY":
-                        this.confidentiality = value;
-                        break;
-                    case "SYMMETRIC_KEY":
-                        this.symmetricKey = value;
-                        break;
-                    case "SYMMETRIC_KEY_SIZE":
-                        this.symmetricKeySize = Integer.parseInt(value);
-                        break;
-                    case "IV_SIZE":
-                        this.IVSize = value.equals("NULL")
-                                          ? null
-                                          : Integer.parseInt(value);
-                        break;
-                    case "IV":
-                        this.IV = value.equals("NULL") ? null : value;
-                        break;
-                    case "INTEGRITY":
-                        this.integrity = value;
-                        break;
-                    case "H":
-                        this.hashFunction = value.equals("NULL") ? null : value;
-                        break;
-                    case "MAC":
-                        this.MAC = value;
-                        break;
-                    case "MACKEY":
-                        this.MACKey = value.equals("NULL") ? null : value;
-                        break;
-                    case "MACKEY_SIZE":
-                        this.MACKeySize = value.equals("NULL")
-                                              ? null
-                                              : Integer.parseInt(value);
-                        break;
-                    }
-                }
-            } catch (final IOException e) {
-                throw new RuntimeException("Error reading " + filename, e);
-            }
-        }
-
-        public boolean usesMAC() {
-            return "HMAC".equals(this.integrity.toUpperCase()) ||
-                "CMAC".equals(this.integrity.toUpperCase());
-        }
-
-        public boolean usesGMAC() {
-            return this.MAC.toUpperCase().contains("GMAC");
-        }
-
-        public boolean usesGCM() {
-            return this.confidentiality.toUpperCase().contains("GCM");
-        }
-
-        public boolean usesChaCha() {
-            return this.confidentiality.toUpperCase().contains("CHACHA");
-        }
-
-        public String getConfidentiality() { return this.confidentiality; }
-
-        public String getSymmetricKey() { return this.symmetricKey; }
-
-        public byte[] getSymmetricKeyBytes() {
-            return Utils.hexToBytes(this.symmetricKey);
-        }
-
-        public int getSymmetricKeySize() { return this.symmetricKeySize; }
-
-        public int getIVSize() { return this.IVSize; }
-
-        public String getIV() { return this.IV; }
-
-        public byte[] getIVBytes() { return Utils.hexToBytes(this.IV); }
-
-        public String getIntegrity() { return this.integrity; }
-
-        public String getHashFunction() { return this.hashFunction; }
-
-        public String getMAC() { return this.MAC; }
-
-        public String getMACKey() { return this.MACKey; }
-
-        public byte[] getMACKeyBytes() { return Utils.hexToBytes(this.MACKey); }
-
-        public int getMACKeySize() { return this.MACKeySize; }
-
-        public String summary() {
-            return confidentiality + " | " + integrity + " | " +
-                (usesMAC() ? MAC : hashFunction) + "\n";
-        }
-
-        @Override
-        public String toString() {
-            return "CryptoConfig [" +
-                "\n CONFIDENTIALITY = " + confidentiality +
-                "\n SYMMETRIC_KEY = " + symmetricKey +
-                "\n SYMMETRIC_KEY_SIZE = " + symmetricKeySize +
-                "\n IV_SIZE = " + IVSize +
-                "\n IV = " + IV +
-                "\n INTEGRITY = " + integrity +
-                "\n H = " + hashFunction +
-                "\n MAC = " + MAC +
-                "\n MACKEY = " + MACKey +
-                "\n MACKEY_SIZE = " + MACKeySize +
-            "\n]";
-        }
     }
 }
 

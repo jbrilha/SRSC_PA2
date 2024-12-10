@@ -4,20 +4,21 @@ import java.net.*;
 import java.io.*;
 import java.util.*;
 
-import DSTP.DSTPDatagramSocket;
+import DSTP.DSTPDatagramSocket; // PA1: added import
+import SHP.CryptoConfig; // PA2: added import
 
 class TFTPclientWRQ {
 	protected InetAddress server;
 	protected String fileName;
 	protected String dataMode;
-	public TFTPclientWRQ(InetAddress ip, String name, String mode) {
+	public TFTPclientWRQ(InetAddress ip, String name, String mode, CryptoConfig cc) { // PA2: take CryptoConfig as argument
 		server = ip;
 		fileName = name;
 		dataMode = mode;
 		try {
 			// Create socket and open output file
-			DSTPDatagramSocket sock = new DSTPDatagramSocket();
-			sock.setSoTimeout(2000);
+			DSTPDatagramSocket sock = new DSTPDatagramSocket(cc); // PA1: changed socket class | PA2: use CryptoConfig from SHP handshake
+            sock.setSoTimeout(2000);
 			int timeoutLimit = 5;
 
 			FileInputStream source = new FileInputStream("../"+fileName);

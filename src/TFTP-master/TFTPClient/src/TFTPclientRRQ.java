@@ -6,19 +6,20 @@ import java.util.*;
 import java.util.zip.Checksum;
 
 import DSTP.DSTPDatagramSocket; // PA1: added import
+import SHP.CryptoConfig; // PA2: added import
 
 class TFTPclientRRQ {
 	protected InetAddress server;
 	protected String fileName;
 	protected String dataMode;
 
-	public TFTPclientRRQ(InetAddress ip, String name, String mode) {
+	public TFTPclientRRQ(InetAddress ip, String name, String mode, CryptoConfig cc) { // PA2: take CryptoConfig as argument
 		server = ip;
 		fileName = name;
 		dataMode = mode;
 
 		try {// Create socket and open output file
-			DSTPDatagramSocket sock = new DSTPDatagramSocket(); // PA1: changed socket class
+			DSTPDatagramSocket sock = new DSTPDatagramSocket(cc); // PA1: changed socket class | PA2: use CryptoConfig from SHP handshake
 			sock.setSoTimeout(2000); // set time out to 2s
 
 			FileOutputStream outFile = new FileOutputStream("../"+fileName); //parent folder

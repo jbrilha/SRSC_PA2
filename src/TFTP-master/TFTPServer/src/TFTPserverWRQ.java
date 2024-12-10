@@ -3,6 +3,7 @@ import java.io.*;
 import java.util.*;
 
 import DSTP.DSTPDatagramSocket; // PA1: added import
+import SHP.CryptoConfig; // PA2: added import
 
 class TFTPserverWRQ extends Thread {
 
@@ -17,10 +18,10 @@ class TFTPserverWRQ extends Thread {
 	protected String fileName;
 
 	// Initialize read request
-	public TFTPserverWRQ(TFTPwrite request) throws TftpException {
-		try {
+	public TFTPserverWRQ(TFTPwrite request, CryptoConfig cc) throws TftpException {
+		try { // PA2: take CryptoConfig as argument
 			req = request;
-			sock = new DSTPDatagramSocket(); // new port for transfer | PA1: changed socket class
+			sock = new DSTPDatagramSocket(cc); // new port for transfer | PA1: changed socket class | PA2: use CryptoConfig from SHP handshake
 			sock.setSoTimeout(1000);
 
 			host = request.getAddress();
