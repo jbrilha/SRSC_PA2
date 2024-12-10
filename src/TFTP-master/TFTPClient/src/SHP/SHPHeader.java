@@ -86,7 +86,6 @@ public class SHPHeader implements Serializable {
             case 2:
                 return 48;
             default:
-                // TODO fix this
                 return 65000;
         }
     }

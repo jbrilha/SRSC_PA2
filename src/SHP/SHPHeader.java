@@ -2,7 +2,6 @@ package SHP;
 
 import java.io.Serializable;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 
 /**
  * SHPHeader
@@ -31,28 +30,6 @@ public class SHPHeader implements Serializable {
         setVersion(version);
         setRelease(release);
         this.msgType = (byte) msgType;
-    }
-
-    public static SHPHeader fromPacket(byte[] packetData) {
-        ByteBuffer headerData = ByteBuffer.wrap(
-            Arrays.copyOf(packetData, HEADER_SIZE));
-
-        byte versionRelease = headerData.get();
-        byte msgType = headerData.get();
-
-        return new SHPHeader(versionRelease, msgType);
-    }
-
-    // assumes the size is already the same as HEADER_SIZE, therefore needs to
-    // be handled before; reason for this is because I want to read the header
-    // msgType before reading the rest of the packet as above
-    public static SHPHeader fromBytes(byte[] bytes) {
-        ByteBuffer headerData = ByteBuffer.wrap(bytes);
-
-        byte versionRelease = headerData.get();
-        byte msgType = headerData.get();
-
-        return new SHPHeader(versionRelease, msgType);
     }
 
     public void setRelease(byte versionRelease) {
@@ -86,7 +63,7 @@ public class SHPHeader implements Serializable {
             case 2:
                 return 48;
             default:
-                // TODO fix this
+                // limited to something big because object sizes can vary
                 return 65000;
         }
     }

@@ -49,6 +49,7 @@ public class SHPServer {
 
     public SHPRequest handshake() throws IllegalAccessException {
         try {
+            System.out.println("Server starting SHP handshake");
             var ois = new ObjectInputStream(in);
 
             // ---------------- MSG1 ----------------
@@ -93,6 +94,7 @@ public class SHPServer {
             destroy();
 
             cryptoHandler.updateCiphersuite(cc, secret);
+            System.out.println("Successful handshake!");
             return new SHPRequest(request.body, cc, request.udp_port);
         } catch (Exception e) {
             e.printStackTrace();

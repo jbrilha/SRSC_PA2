@@ -13,5 +13,5 @@ player_port="${7:-9000}"
 
 echo "Starting proxy passthrough from $host:$server_port to $host:$player_port"
 
-./compile.sh 
+# ./compile.sh 
 java -cp .:../libs/bcprov-jdk18on-1.78.1.jar StreamingService.hjUDPproxy.hjUDPproxy $userID $password $host $tcp_port $movie $server_port $player_port

@@ -44,6 +44,7 @@ public class SHPClient {
     public CryptoConfig handshake(String userId, String password,
             String filename, int udp_port) {
         try {
+            System.out.println("Client starting SHP handshake");
             byte[] pwHash = cryptoHandler.hashPassword(password);
             var oos = new ObjectOutputStream(out);
 
@@ -75,6 +76,7 @@ public class SHPClient {
 
             CryptoConfig cc = CryptoConfig.deserialize(confirmation.config);
             cryptoHandler.updateCiphersuite(cc, secretKey);
+            System.out.println("Successful handshake!");
             return cc;
         } catch (Exception e) {
             e.printStackTrace();
@@ -128,7 +130,7 @@ public class SHPClient {
             throws Exception {
         SHPPacket packet = (SHPPacket) ois.readObject();
         SHPPayload.Type2 payload2 = (SHPPayload.Type2) packet.getPayload();
-        // TODO better handling
+
         if (packet.getHeader().getMsgType() != 2)
             throw new IllegalAccessException();
 
@@ -171,7 +173,7 @@ public class SHPClient {
             throws Exception {
         SHPPacket packet = (SHPPacket) ois.readObject();
         SHPPayload.Type4 payload4 = (SHPPayload.Type4) packet.getPayload();
-        // TODO better handling
+
         if (packet.getHeader().getMsgType() != 4)
             throw new IllegalAccessException();
 

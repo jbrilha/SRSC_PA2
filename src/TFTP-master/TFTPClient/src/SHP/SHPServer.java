@@ -49,6 +49,7 @@ public class SHPServer {
 
     public SHPRequest handshake() throws IllegalAccessException {
         try {
+            System.out.println("Server starting SHP handshake");
             var ois = new ObjectInputStream(in);
 
             // ---------------- MSG1 ----------------
@@ -93,6 +94,7 @@ public class SHPServer {
             destroy();
 
             cryptoHandler.updateCiphersuite(cc, secret);
+            System.out.println("Successful handshake!");
             return new SHPRequest(request.body, cc, request.udp_port);
         } catch (Exception e) {
             e.printStackTrace();
@@ -252,8 +254,8 @@ public class SHPServer {
         if (!validSign) {
             throw new IllegalAccessException("Invalid signature");
         }
-        if (!(request.body.equals("cars.dat") ||
-                request.body.equals("monsters.dat"))) {
+        if (!(request.body.equals("server1.jpg") ||
+                request.body.equals("server2.pdf"))) {
             throw new FileNotFoundException(request.body);
         }
 

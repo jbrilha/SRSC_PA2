@@ -149,8 +149,6 @@ public class CryptoHandler {
     public byte[] performSymetricEncryption(byte[] data, byte[] secret)
             throws Exception {
         SecretKeySpec key = new SecretKeySpec(secret, AES);
-        System.out.println("sec: " + Utils.bytesToHex(secret) +
-                " | size: " + secret.length);
         aesCipher.init(Cipher.ENCRYPT_MODE, key);
         return aesCipher.doFinal(data);
     }
@@ -168,12 +166,12 @@ public class CryptoHandler {
         PBEKeySpec pwSpec = new PBEKeySpec(pwHex.toCharArray());
         Key sKey = secKeyFactory.generateSecret(pwSpec);
 
-        String counterStr = Utils.bytesToHex(counter);
-        BigInteger counterBigInt = new BigInteger(counterStr, 16);
-        int counterInt = Math.max(counterBigInt.intValue() & 0xFFFF, 8192);
-        System.out.println("cint: " + counterInt);
+        long value = ((counter[0] & 0xFFL) << 24) | 
+                     ((counter[1] & 0xFFL) << 16) | 
+                     ((counter[2] & 0xFFL) << 8)  | 
+                     (counter[3] & 0xFFL);
+        int counterInt = 10000 + (int)(value % 90001);
 
-        // TODO FIX COUNTER
         pwCipher.init(Cipher.ENCRYPT_MODE, sKey,
                 new PBEParameterSpec(salt, counterInt));
 
@@ -201,11 +199,12 @@ public class CryptoHandler {
         PBEKeySpec pwSpec = new PBEKeySpec(pwHex.toCharArray());
         Key sKey = secKeyFactory.generateSecret(pwSpec);
 
-        String counterStr = Utils.bytesToHex(counter);
-        BigInteger counterBigInt = new BigInteger(counterStr, 16);
-        int counterInt = Math.max(counterBigInt.intValue() & 0xFFFF, 8192);
+        long value = ((counter[0] & 0xFFL) << 24) | 
+                     ((counter[1] & 0xFFL) << 16) | 
+                     ((counter[2] & 0xFFL) << 8)  | 
+                     (counter[3] & 0xFFL);
+        int counterInt = 10000 + (int)(value % 90001);
 
-        // TODO FIX COUNTER
         pwCipher.init(Cipher.DECRYPT_MODE, sKey,
                 new PBEParameterSpec(salt, counterInt));
 
