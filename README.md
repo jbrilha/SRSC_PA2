@@ -23,7 +23,8 @@
 * The client commands can be swapped in the docker-compose.TFTP.yml file and a new client can be deployed with:
 
 ```docker compose -f docker-compose.TFTP.yml up --build client```
-to have it download a different file from the same server that was already up.
+
+   to have it download a different file from the same server that was already up.
 
 ## Example ciphersuites
 - Same configs from PA1 are now in the ciphersuites directory with the keys removed, as they are now derived from the Diffie-Hellman agreement generated secret
