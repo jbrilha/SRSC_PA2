@@ -25,22 +25,12 @@ class hjUDPproxy {
             showHelp();
             System.exit(0);
         }
-	
-        // PA2: parsing new args, do I count these lines in the form?
-        String username = args[0];
-        String password = args[1];
-        String hostAddr = args[2];
-        int tcp_port = Integer.parseInt(args[3]);
-        String movie = args[4].contains(".dat") ? args[4] : args[4] + ".dat";
 
-        int udp_port = Integer.parseInt(args[5]);
-        int playerPort = Integer.parseInt(args[6]);
+        SHPClient sc = new SHPClient(args[2], Integer.parseInt(args[3])); // PA2: init SHP client
+        CryptoConfig cc = sc.handshake(args[0], args[1], args[4], Integer.parseInt(args[5])); // PA2: SHP handshake
 
-        SHPClient sc = new SHPClient(hostAddr, tcp_port);
-        CryptoConfig cc = sc.handshake(username, password, movie, udp_port); // PA2: SHP handshake
-
-        SocketAddress inSocketAddress = new InetSocketAddress(hostAddr, udp_port); // PA2: socket creation with new args
-        SocketAddress outSocketAddress = new InetSocketAddress(hostAddr, playerPort); // PA2: socket creation with new args
+        SocketAddress inSocketAddress = new InetSocketAddress(args[2], Integer.parseInt(args[5])); // PA2: socket creation with new args
+        SocketAddress outSocketAddress = new InetSocketAddress(args[2], Integer.parseInt(args[6])); // PA2: socket creation with new args
 
         // Manage this according to your required setup, namely
 	// if you want to use unicast or multicast channels
@@ -85,6 +75,7 @@ class hjUDPproxy {
         }
     }
 
+    // PA2: not counting this in the lines added.....
     private static void showHelp() {
         System.out.println(
                 "Usage: hjUDPproxy <username> <password> <host_addr> "
