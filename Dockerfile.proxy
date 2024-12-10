@@ -9,6 +9,6 @@ COPY src/ClientECCKeyPair.sec src/
 COPY src/ServerECCPubKey.sec src/
 
 WORKDIR /app/src
-RUN javac -cp .:../libs/bcprov-jdk18on-1.78.1.jar DSTP/*.java SHP/*.java StreamingService/**/*.java
+RUN find . -name '*.class' -delete && javac -cp .:../libs/bcprov-jdk18on-1.78.1.jar DSTP/*.java SHP/*.java StreamingService/**/*.java
 
 ENTRYPOINT ["java", "-cp", ".:../libs/bcprov-jdk18on-1.78.1.jar", "StreamingService.hjUDPproxy.hjUDPproxy"]
