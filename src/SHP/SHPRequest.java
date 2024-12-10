@@ -41,7 +41,7 @@ public class SHPRequest implements Serializable {
     @Override
     public String toString() {
         return "Request [body= " + body +
-            ", condfig=" + config +
+            ", config=" + config +
             ", udp_port=" + udp_port + "]";
     }
 }
