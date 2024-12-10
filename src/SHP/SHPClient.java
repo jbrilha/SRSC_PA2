@@ -11,6 +11,7 @@ import java.net.Socket;
 import java.security.PublicKey;
 
 public class SHPClient {
+    boolean showMessages = false;
     CryptoHandler cryptoHandler;
     Socket sock;
     InputStream in;
@@ -47,32 +48,33 @@ public class SHPClient {
             var oos = new ObjectOutputStream(out);
 
             // ---------------- MSG1 ----------------
-            SHPPacket packet = prepareMessage1(userId);
-            oos.writeObject(packet);
+            sendMessage1(oos, userId);
 
             // ---------------- MSG2 ----------------
             var ois = new ObjectInputStream(in);
             SHPPayload.Type2 payload2 = processMessage2(ois);
 
             // ---------------- MSG3 ----------------
-            packet = prepareMessage3(userId, pwHash, filename, udp_port, payload2);
-            SHPPayload.Type3 payload3 = (SHPPayload.Type3) packet.getPayload();
-            oos.writeObject(packet);
+            byte[] nonce4 = CryptoHandler.generateNonces(1);
+            sendMessage3(oos, userId, pwHash, filename, udp_port, payload2,
+                    nonce4);
 
             // ---------------- MSG4 ----------------
             SHPPayload.Type4 payload4 = processMessage4(ois);
-            SHPEncryptedConfirmation confirmation = validateConfirmation(userId, pwHash, payload4);
-            byte[] secretKey = cryptoHandler.generateSharedSecret(payload4.ydhServer);
+            SHPEncryptedConfirmation confirmation =
+                validateConfirmation(userId, pwHash, payload4, nonce4);
+            byte[] secretKey =
+                cryptoHandler.generateSharedSecret(payload4.ydhServer);
 
             // ---------------- MSG5 ----------------
-            packet = prepareMessage5(confirmation.nonce5, secretKey);
-            oos.writeObject(packet);
+            sendMessage5(oos, confirmation.nonce5, secretKey);
 
             ois.close();
             oos.close();
             destroy();
+
             CryptoConfig cc = CryptoConfig.deserialize(confirmation.config);
-            cc.deriveKeysFromSecret(secretKey);
+            cryptoHandler.updateCiphersuite(cc, secretKey);
             return cc;
         } catch (Exception e) {
             e.printStackTrace();
@@ -81,7 +83,8 @@ public class SHPClient {
     }
 
     private SHPEncryptedConfirmation validateConfirmation(String userId, byte[] pwHash,
-            SHPPayload.Type4 payload4) throws Exception {
+            SHPPayload.Type4 payload4, byte[] nonce4)
+            throws Exception {
         boolean validAuth = cryptoHandler.validateMAC(
                 pwHash, payload4.authCode, payload4.envelope, payload4.ydhServer,
                 payload4.signature);
@@ -91,10 +94,16 @@ public class SHPClient {
         var confirmation = SHPEncryptedConfirmation.deserialize(
                 cryptoHandler.performAssymetricDecryption(
                         payload4.envelope, clientECC.getPrivateKey()));
-        SHPSignedConfirmation sigReq = SHPSignedConfirmation.fromEncryptedConfirmation(
+        SHPSignedConfirmation sigConf = SHPSignedConfirmation.fromEncryptedConfirmation(
                 confirmation, userId, payload4.ydhServer);
+
+        boolean validChall = CryptoHandler.validateChallenge(sigConf.nonce4plus1, nonce4);
+        if (!validChall) {
+            throw new IllegalAccessException("Invalid challenge");
+        }
+
         boolean validSign = cryptoHandler.validateSignature(
-                serverPubKey, payload4.signature, sigReq.serialize());
+                serverPubKey, payload4.signature, sigConf.serialize());
 
         if (!validSign) {
             throw new IllegalAccessException();
@@ -103,12 +112,16 @@ public class SHPClient {
         return confirmation;
     }
 
-    private SHPPacket prepareMessage1(String userId) throws Exception {
+    private void sendMessage1(ObjectOutputStream oos, String userId)
+            throws Exception {
         SHPHeader header = new SHPHeader(0x2, 0x1, 0x1);
         SHPPayload.Type1 payload1 = new SHPPayload.Type1(userId.getBytes());
         SHPPacket packet = new SHPPacket(header, payload1);
-        System.out.println("sent msg1: " + packet + "\n");
-        return packet;
+
+        if (showMessages)
+            System.out.println("sent msg1: " + packet + "\n");
+
+        oos.writeObject(packet);
     }
 
     private SHPPayload.Type2 processMessage2(ObjectInputStream ois)
@@ -118,25 +131,27 @@ public class SHPClient {
         // TODO better handling
         if (packet.getHeader().getMsgType() != 2)
             throw new IllegalAccessException();
-        System.out.println("rec msg2: " + packet + "\n");
+
+        if (showMessages)
+            System.out.println("rec msg2: " + packet + "\n");
+
         return payload2;
     }
 
-    private SHPPacket prepareMessage3(String userId, byte[] pwHash,
-            String filename, int udp_port,
-            SHPPayload.Type2 payload2)
+    private void sendMessage3(ObjectOutputStream oos, String userId,
+            byte[] pwHash, String filename, int udp_port,
+            SHPPayload.Type2 payload2, byte[] nonce4)
             throws Exception {
-        byte[] nonce4 = CryptoHandler.generateNonces(1);
+        byte[] nonce3plus1 = CryptoHandler.generateChallenge(payload2.chall);
         byte[] ydhClient = cryptoHandler.generateDHPubKey();
-        // System.out.println("\n\nydhclient: " + Utils.bytesToHex(ydhClient));
 
         SHPEncryptedRequest encReq = new SHPEncryptedRequest(
-                filename, userId, payload2.chall, nonce4, udp_port);
+                filename, userId, nonce3plus1, nonce4, udp_port);
         byte[] pbe = cryptoHandler.performPasswordEncryption(
                 encReq.serialize(), pwHash, payload2.salt, payload2.counter);
 
         SHPSignedRequest sigReq = new SHPSignedRequest(
-                filename, userId, payload2.chall, nonce4, udp_port, ydhClient);
+                filename, userId, nonce3plus1, nonce4, udp_port, ydhClient);
         byte[] sig = cryptoHandler.generateSignature(clientECC.getPrivateKey(),
                 sigReq.serialize());
 
@@ -145,8 +160,11 @@ public class SHPClient {
         SHPHeader header = new SHPHeader(0x2, 0x1, 0x3);
         SHPPayload.Type3 payload3 = new SHPPayload.Type3(pbe, ydhClient, sig, authCode);
         SHPPacket packet = new SHPPacket(header, payload3);
-        System.out.println("sent msg3: " + packet + "\n");
-        return packet;
+
+        if (showMessages)
+            System.out.println("sent msg3: " + packet + "\n");
+
+        oos.writeObject(packet);
     }
 
     private SHPPayload.Type4 processMessage4(ObjectInputStream ois)
@@ -156,14 +174,18 @@ public class SHPClient {
         // TODO better handling
         if (packet.getHeader().getMsgType() != 4)
             throw new IllegalAccessException();
-        System.out.println("rec msg4: " + packet + "\n");
+
+        if (showMessages)
+            System.out.println("rec msg4: " + packet + "\n");
+
         return payload4;
     }
 
-    private SHPPacket prepareMessage5(byte[] nonce5, byte[] secretKey)
-            throws Exception {
-        // TODO
-        byte[] nonce5plus1 = CryptoHandler.generateNonces(1);
+    private void sendMessage5(ObjectOutputStream oos, byte[] nonce5,
+            byte[] secret) throws Exception {
+        byte[] nonce5plus1 = CryptoHandler.generateChallenge(nonce5);
+        byte[] secretKey = cryptoHandler.deriveKeyFromSecret(
+                32, "SYMMETRIC_KEY".getBytes(), secret);
         var greenlight = new SHPEncryptedGreenlight("GO", nonce5plus1);
         byte[] encGl = cryptoHandler.performSymetricEncryption(
                 greenlight.serialize(), secretKey);
@@ -173,8 +195,10 @@ public class SHPClient {
         SHPPayload.Type5 payload5 = new SHPPayload.Type5(encGl, authCode);
         SHPPacket packet = new SHPPacket(header, payload5);
 
-        System.out.println("sent msg5: " + packet + "\n");
-        return packet;
+        if (showMessages)
+            System.out.println("sent msg5: " + packet + "\n");
+        
+        oos.writeObject(packet);
     }
 
     public void destroy() {

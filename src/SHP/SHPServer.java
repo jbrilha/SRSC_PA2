@@ -16,6 +16,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 public class SHPServer {
+    boolean showMessages = false;
     CryptoHandler cryptoHandler;
     Map<String, UserData> userDB;
     ServerSocket serverSock;
@@ -36,8 +37,7 @@ public class SHPServer {
         parseUserDB();
 
         try {
-            this.serverECC =
-                ECConfig.parseConfigFile("ServerECCKeyPair.sec", cryptoHandler);
+            this.serverECC = ECConfig.parseConfigFile("ServerECCKeyPair.sec", cryptoHandler);
             this.serverSock = new ServerSocket(port);
             this.sock = serverSock.accept();
             this.in = sock.getInputStream();
@@ -72,90 +72,108 @@ public class SHPServer {
             nonceBuffer.get(chall);
 
             var oos = new ObjectOutputStream(out);
-            SHPPacket packet = prepareMessage2(salt, counter, chall);
-            oos.writeObject(packet);
+            sendMessage2(oos, salt, counter, chall);
 
             // ---------------- MSG3 ----------------
             SHPPayload.Type3 payload3 = processMessage3(ois);
-            SHPEncryptedRequest request =
-                validateRequest(user, payload3, salt, counter);
+            SHPEncryptedRequest request = validateRequest(user, payload3, salt, counter, chall);
 
             // ---------------- MSG4 ----------------
+            byte[] nonce5 = CryptoHandler.generateNonces(1);
             CryptoConfig cc = new CryptoConfig();
-            packet = prepareMessage4(request, user, cc);
-            oos.writeObject(packet);
+            sendMessage4(oos, user, cc, request.nonce4, nonce5);
 
-            byte[] secretKey =
-                cryptoHandler.generateSharedSecret(payload3.ydhClient);
+            byte[] secret = cryptoHandler.generateSharedSecret(payload3.ydhClient);
             // ---------------- MSG5 ----------------
             SHPPayload.Type5 payload5 = processMessage5(ois);
-            validateGreenlight(secretKey, payload5);
+            validateGreenlight(secret, payload5, nonce5);
 
             ois.close();
             oos.close();
             destroy();
-            cc.deriveKeysFromSecret(secretKey);
-            SHPRequest req = new SHPRequest(request.body, cc, request.udp_port);
-            return req;
+
+            cryptoHandler.updateCiphersuite(cc, secret);
+            return new SHPRequest(request.body, cc, request.udp_port);
         } catch (Exception e) {
             e.printStackTrace();
             return null;
         }
     }
 
-    private boolean validateGreenlight(byte[] secretKey,
-            SHPPayload.Type5 payload5)
-            throws Exception {
+    private void validateGreenlight(byte[] secret, SHPPayload.Type5 payload5,
+            byte[] nonce5) throws Exception {
+        byte[] secretKey = cryptoHandler.deriveKeyFromSecret(
+                32, "SYMMETRIC_KEY".getBytes(), secret);
         boolean validAuth = cryptoHandler.validateMAC(
                 secretKey, payload5.authCode, payload5.greenlight);
         if (!validAuth) {
             throw new IllegalAccessException();
         }
 
-        System.out.println(
-            "gl: " + SHPEncryptedGreenlight.deserialize(payload5.greenlight));
+        var greenlight = SHPEncryptedGreenlight.deserialize(
+                cryptoHandler.performSymetricDecryption(payload5.greenlight,
+                        secretKey));
+        if (!greenlight.body.equals("GO")) {
+            throw new IllegalAccessException("Unexpected greenlight message");
+        }
 
-        return validAuth;
+        boolean validChall = CryptoHandler.validateChallenge(greenlight.nonce5plus1, nonce5);
+        if (!validChall) {
+            throw new IllegalAccessException("Invalid challenge");
+        }
     }
 
     private SHPPayload.Type1 processMessage1(ObjectInputStream ois)
             throws Exception {
         SHPPacket packet = (SHPPacket) ois.readObject();
         SHPPayload.Type1 payload1 = (SHPPayload.Type1) packet.getPayload();
-        // TODO better handling
-        if (packet.getHeader().getMsgType() != 1)
-            throw new IllegalAccessException();
-        System.out.println("rec msg1: " + packet + "\n");
+
+        int msgType = packet.getHeader().getMsgType();
+        if (msgType != 1)
+            throw new IllegalAccessException(String.format(
+                    "Invalid message type. Expected : %d | Receieved: %d", 1,
+                    msgType));
+
+        if (showMessages)
+            System.out.println("rec msg1: " + packet + "\n");
+
         return payload1;
     }
 
-    private SHPPacket prepareMessage2(byte[] salt, byte[] counter, byte[] chall)
-            throws Exception {
+    private void sendMessage2(ObjectOutputStream oos, byte[] salt,
+            byte[] counter, byte[] chall) throws Exception {
         SHPHeader header = new SHPHeader(0x2, 0x1, 0x2);
         SHPPayload.Type2 payload2 = new SHPPayload.Type2(salt, counter, chall);
         SHPPacket packet = new SHPPacket(header, payload2);
-        System.out.println("sent msg2: " + packet + "\n");
-        return packet;
+
+        if (showMessages)
+            System.out.println("sent msg2: " + packet + "\n");
+
+        oos.writeObject(packet);
     }
 
     private SHPPayload.Type3 processMessage3(ObjectInputStream ois)
             throws Exception {
         SHPPacket packet = (SHPPacket) ois.readObject();
         SHPPayload.Type3 payload3 = (SHPPayload.Type3) packet.getPayload();
-        // TODO better handling
-        if (packet.getHeader().getMsgType() != 3)
-            throw new IllegalAccessException();
-        System.out.println("rec msg3: " + packet + "\n");
+
+        int msgType = packet.getHeader().getMsgType();
+        if (msgType != 3)
+            throw new IllegalAccessException(String.format(
+                    "Invalid message type. Expected : %d | Receieved: %d", 3,
+                    msgType));
+
+        if (showMessages)
+            System.out.println("rec msg3: " + packet + "\n");
+
         return payload3;
     }
 
-    private SHPPacket prepareMessage4(SHPEncryptedRequest req, UserData user,
-            CryptoConfig cryptoConfig)
-            throws Exception {
+    private void sendMessage4(ObjectOutputStream oos, UserData user,
+            CryptoConfig cryptoConfig, byte[] nonce4,
+            byte[] nonce5) throws Exception {
         byte[] ydhServer = cryptoHandler.generateDHPubKey();
-        // TODO
-        byte[] nonce4plus1 = req.nonce4;
-        byte[] nonce5 = CryptoHandler.generateNonces(1);
+        byte[] nonce4plus1 = CryptoHandler.generateChallenge(nonce4);
         byte[] config = cryptoConfig.serialize();
         String confirmation = "confirmed";
 
@@ -173,23 +191,29 @@ public class SHPServer {
                 user.getPasswordHash(), encEnvelope, ydhServer, sig);
 
         SHPHeader header = new SHPHeader(0x2, 0x1, 0x4);
-        SHPPayload.Type4 payload4 =
-            new SHPPayload.Type4(encEnvelope, ydhServer, sig, authCode);
+        SHPPayload.Type4 payload4 = new SHPPayload.Type4(encEnvelope, ydhServer, sig, authCode);
         SHPPacket packet = new SHPPacket(header, payload4);
 
-        System.out.println("sent msg4: " + packet + "\n");
-        return packet;
+        if (showMessages)
+            System.out.println("sent msg4: " + packet + "\n");
+
+        oos.writeObject(packet);
     }
 
     private SHPPayload.Type5 processMessage5(ObjectInputStream ois)
             throws Exception {
         SHPPacket packet = (SHPPacket) ois.readObject();
         SHPPayload.Type5 payload5 = (SHPPayload.Type5) packet.getPayload();
-        // TODO better handling
-        if (packet.getHeader().getMsgType() != 5)
-            throw new IllegalAccessException();
 
-        System.out.println("rec msg5: " + packet + "\n");
+        int msgType = packet.getHeader().getMsgType();
+        if (msgType != 5)
+            throw new IllegalAccessException(String.format(
+                    "Invalid message type. Expected : %d | Receieved: %d", 5,
+                    msgType));
+
+        if (showMessages)
+            System.out.println("rec msg5: " + packet + "\n");
+
         return payload5;
     }
 
@@ -204,26 +228,29 @@ public class SHPServer {
         }
     }
 
-    private SHPEncryptedRequest validateRequest(UserData user,
-            SHPPayload.Type3 payload3,
-            byte[] salt, byte[] counter)
-            throws Exception {
+    private SHPEncryptedRequest validateRequest(UserData user, SHPPayload.Type3 payload3, byte[] salt,
+            byte[] counter, byte[] nonce3) throws Exception {
         boolean validAuth = cryptoHandler.validateMAC(
                 user.getPasswordHash(), payload3.authCode, payload3.pbe,
                 payload3.ydhClient, payload3.signature);
         if (!validAuth) {
-            throw new IllegalAccessException();
+            throw new IllegalAccessException("Invalid HMAC");
         }
         var request = SHPEncryptedRequest.deserialize(
                 cryptoHandler.performPasswordDecryption(
                         payload3.pbe, user.getPasswordHash(), salt, counter));
-        SHPSignedRequest sigReq =
-            SHPSignedRequest.fromEncryptedRequest(request, payload3.ydhClient);
+        SHPSignedRequest sigReq = SHPSignedRequest.fromEncryptedRequest(request, payload3.ydhClient);
+
+        boolean validChall = CryptoHandler.validateChallenge(sigReq.nonce3plus1, nonce3);
+        if (!validChall) {
+            throw new IllegalAccessException("Invalid challenge");
+        }
+
         boolean validSign = cryptoHandler.validateSignature(
                 user.getPublicKey(), payload3.signature, sigReq.serialize());
 
         if (!validSign) {
-            throw new IllegalAccessException();
+            throw new IllegalAccessException("Invalid signature");
         }
         if (!(request.body.equals("cars.dat") ||
                 request.body.equals("monsters.dat"))) {
@@ -234,16 +261,14 @@ public class SHPServer {
     }
 
     private void parseUserDB() {
-        try (BufferedReader reader =
-                 new BufferedReader(new FileReader("userdatabase.txt"))) {
+        try (BufferedReader reader = new BufferedReader(new FileReader("userdatabase.txt"))) {
             String line;
             while ((line = reader.readLine()) != null) {
                 final String[] fields = line.split(":", 4);
                 final String userID = fields[0].trim();
                 final byte[] pwHash = Utils.hexToBytes(fields[1].trim());
                 final byte[] salt = Utils.hexToBytes(fields[2].trim());
-                final PublicKey key =
-                    cryptoHandler.parseECPublicKeyHex(fields[3].trim());
+                final PublicKey key = cryptoHandler.parseECPublicKeyHex(fields[3].trim());
 
                 userDB.put(userID, new UserData(userID, pwHash, salt, key));
             }

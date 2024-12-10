@@ -18,7 +18,6 @@ public class SHPEncryptedRequest implements Serializable {
                                byte[] nonce4, int udp_port) {
         this.body = body;
         this.userId = userId;
-        // TODO THIS PLUS 1
         this.nonce3plus1 = nonce3plus1;
         this.nonce4 = nonce4;
         this.udp_port = udp_port;

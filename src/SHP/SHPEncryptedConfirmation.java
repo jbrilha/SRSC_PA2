@@ -51,8 +51,8 @@ public class SHPEncryptedConfirmation implements Serializable {
 		}
 
         return "EncryptedConfirmation [body= " + body +
-            ", nonce3plus1=" + Utils.bytesToHex(nonce4plus1) +
-            ", nonce4=" + Utils.bytesToHex(nonce5) +
+            ", nonce4plus1=" + Utils.bytesToHex(nonce4plus1) +
+            ", nonce5=" + Utils.bytesToHex(nonce5) +
             ", config=" + cc + "]";
     }
 }

@@ -18,7 +18,6 @@ public class SHPSignedConfirmation implements Serializable {
                                  byte[] config, byte[] ydhServer) {
         this.body = body;
         this.userId = userId;
-        // TODO THIS PLUS 1
         this.nonce4plus1 = nonce4plus1;
         this.ydhServer = ydhServer;
         this.config = config;
@@ -53,7 +52,8 @@ public class SHPSignedConfirmation implements Serializable {
 
     @Override
     public String toString() {
-        return "SignedRequest [body= " + body + ", userId=" + userId +
+        return "SignedRequest [body= " + body +
+            ", userId=" + userId +
             ", nonce4plus1=" + Utils.bytesToHex(nonce4plus1) +
             ", config=" + Utils.bytesToHex(config) +
             ", ydhServer=" + Utils.bytesToHex(ydhServer) + "]";
