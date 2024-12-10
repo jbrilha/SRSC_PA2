@@ -10,7 +10,7 @@
     * compile.sh — Due to the directory structure of TFTP-master, this _*only*_ compiles the Java files inside StreamingService, as well as the DSTP and SHP classes
     * proxy.sh — Starts the Proxy service, defaults to having SHP handshake on TCP port 3333 (default in the SHPServer as the assignment spec said not to pass arguments to the streamServer) for user1@email.com with password1 on localhost, requesting movie cars.dat and passing communication between port 10000 and port 9000; accepts the same arguments as hjUDPproxy.java
     * streamServer.sh — Starts the StreamServer service
-- There are also two docker-compose files, both of which grab whatever cryptoconfig.txt file that is inside of src:
+- There is also a docker-compose files, which grabs whatever ciphersuite.conf file that is inside of src:
     * docker-compose.stream.yml — starts the stream in one container, the proxy in another, and allows for VLC to listen on udp://@:9000
     
 ## Testing TFTP
