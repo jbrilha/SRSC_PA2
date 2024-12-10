@@ -138,7 +138,7 @@ public class CryptoHandler {
 
     public int getHashLength() {
         if (config.usesMAC()) {
-        return config.getMACKeySize();
+        return config.getMACKeySize() / 8;
             // if (config.usesGMAC()) {
             //     return GMAC.getMacSize();
             // }
