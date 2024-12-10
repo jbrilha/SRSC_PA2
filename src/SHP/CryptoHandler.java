@@ -18,6 +18,7 @@ import java.security.Signature;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
+import java.util.Arrays;
 import javax.crypto.Cipher;
 import javax.crypto.KeyAgreement;
 import javax.crypto.Mac;
@@ -34,7 +35,7 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider;
  */
 public class CryptoHandler {
     private final static String HMAC = "HMAC-SHA512";
-    private final static String AES_CTR_NOPADDING = "AES/CTR/NoPadding";
+    private final static String AES = "AES";
 
     private MessageDigest hash;
     private Mac mac;
@@ -84,7 +85,7 @@ public class CryptoHandler {
             this.signature = Signature.getInstance("SHA256withECDSA", "BC");
             this.pwCipher = Cipher.getInstance("PBEWITHSHA256AND192BITAES-CBC-BC", "BC");
             this.envCipher = Cipher.getInstance("ECIES", "BC");
-            this.aesCipher = Cipher.getInstance(AES_CTR_NOPADDING, "BC");
+            this.aesCipher = Cipher.getInstance(AES, "BC");
             this.secKeyFactory = SecretKeyFactory.getInstance(
                     "PBEWITHSHA256AND192BITAES-CBC-BC", "BC");
             this.keyAgreement = KeyAgreement.getInstance("DH", "BC");
@@ -147,8 +148,9 @@ public class CryptoHandler {
     // Encryption
     public byte[] performSymetricEncryption(byte[] data, byte[] secret)
             throws Exception {
-        SecretKeySpec key = new SecretKeySpec(secret, AES_CTR_NOPADDING);
-        System.out.println("sec: " + Utils.bytesToHex(secret) + " | size: " + secret.length);
+        SecretKeySpec key = new SecretKeySpec(secret, AES);
+        System.out.println("sec: " + Utils.bytesToHex(secret) +
+                " | size: " + secret.length);
         aesCipher.init(Cipher.ENCRYPT_MODE, key);
         return aesCipher.doFinal(data);
     }
@@ -181,7 +183,7 @@ public class CryptoHandler {
     // Decryption
     public byte[] performSymetricDecryption(byte[] data, byte[] secret)
             throws Exception {
-        SecretKeySpec key = new SecretKeySpec(secret, AES_CTR_NOPADDING);
+        SecretKeySpec key = new SecretKeySpec(secret, AES);
         aesCipher.init(Cipher.DECRYPT_MODE, key);
         return aesCipher.doFinal(data);
     }
@@ -257,6 +259,67 @@ public class CryptoHandler {
         r.nextBytes(nonces);
 
         return nonces;
+    }
+
+    public static byte[] generateChallenge(byte[] nonce) {
+        BigInteger nonceInt = new BigInteger(1, nonce);
+        BigInteger chall = nonceInt.add(BigInteger.ONE);
+
+        return chall.toByteArray();
+    }
+
+    public static boolean validateChallenge(byte[] chall, byte[] nonce) {
+        return MessageDigest.isEqual(chall, generateChallenge(nonce));
+    }
+
+    public void updateCiphersuite(CryptoConfig cc, byte[] secret)
+            throws Exception {
+        int ivSize = cc.getIVSize();
+        if (ivSize > 0) {
+            byte[] ivInfo = "IV".getBytes();
+            var IV = Utils.bytesToHex(deriveKeyFromSecret(ivSize, ivInfo, secret));
+            cc.setIV(IV);
+        }
+
+        int macKeySize = cc.getMACKeySize() / 8;
+        if (macKeySize > 0) {
+            byte[] macKeyInfo = "MAC_KEY".getBytes();
+            var macKey = Utils.bytesToHex(
+                    deriveKeyFromSecret(macKeySize, macKeyInfo, secret));
+            cc.setMACKey(macKey);
+        }
+
+        int symKeySize = cc.getSymmetricKeySize() / 8;
+        byte[] symKeyInfo = "SYMMETRIC_KEY".getBytes();
+        var symKey = Utils.bytesToHex(
+                deriveKeyFromSecret(symKeySize, symKeyInfo, secret));
+        cc.setSymmetricKey(symKey);
+    }
+
+    // HKDF from a couple of places
+    // https://www.javatips.net/api/keywhiz-master/hkdf/src/main/java/keywhiz/hkdf/Hkdf.java
+    // https://github.com/signalapp/libsignal-protocol-java/blob/master/java/src/main/java/org/whispersystems/libsignal/kdf/HKDF.java
+    // https://github.com/patrickfav/hkdf/blob/main/src/main/java/at/favre/lib/hkdf/HKDF.java
+    // https://github.com/AdoptOpenJDK/openjdk-jdk11/blob/master/src/java.base/share/classes/sun/security/ssl/HKDF.java
+    public byte[] deriveKeyFromSecret(int length, byte[] info, byte[] secret)
+            throws Exception {
+        mac.init(new SecretKeySpec(secret, HMAC));
+        byte[] pseudoRand = mac.doFinal(new byte[32]);
+        mac.init(new SecretKeySpec(pseudoRand, HMAC));
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        byte[] prev = new byte[0];
+        byte counter = 1;
+
+        while (output.size() < length) {
+            mac.reset();
+            mac.update(prev);
+            mac.update(info);
+            mac.update(counter++);
+            prev = mac.doFinal();
+            output.write(prev);
+        }
+
+        return Arrays.copyOf(output.toByteArray(), length);
     }
 
     // Other sec property validators
