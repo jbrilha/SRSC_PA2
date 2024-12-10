@@ -9,15 +9,14 @@ public class TFTPServer {
 
 	public static void main(String argv[]) {
 		try {
-            int tcp_port = argv[0] == null ? 3333 : Integer.parseInt(argv[0]);
+            int tcp_port = argv[0] == null ? 3333 : Integer.parseInt(argv[0]); // PA2: default 3333 or parse arg
             while(true) { // PA2: move while here to handshake w every new client
                             // means the ciphersuite can be different for each client, which is neat :)
                 SHPServer sc = new SHPServer(tcp_port);
                 SHPRequest request = sc.handshake(); // PA2: SHP handshake
                 CryptoConfig cc = request.config;
 
-
-                //use port 6973
+                //use port 6973 // PA2: the client sends this port
                 DSTPDatagramSocket sock = new DSTPDatagramSocket(request.udp_port, cc); // PA1: changed socket class
                 System.out.println("Server Ready.  Port:  " + sock.getLocalPort());
 
@@ -43,8 +42,6 @@ public class TFTPServer {
 			System.out.println("Server terminated(IOException)" + e.getMessage());
         } catch (Exception e) { // PA2: catch exception from SHP handshake
             e.printStackTrace();
-            return;
-            
         }
 	}
 }

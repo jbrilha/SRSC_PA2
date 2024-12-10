@@ -48,16 +48,15 @@ public class TFTPClient {
 			
             SHPClient sc = new SHPClient(host, tcp_port);
             CryptoConfig cc = sc.handshake(username, password, fileName, 6973); // PA2: SHP handshake udp port has to be 6973 set here or server-side
-
 			
 			InetAddress server = InetAddress.getByName(host);
 			
 			//process read request
 			if(type.matches("R")){
-				TFTPclientRRQ r = new TFTPclientRRQ(server, fileName, mode, cc);}
+				TFTPclientRRQ r = new TFTPclientRRQ(server, fileName, mode, cc);} // PA2: pass in CryptoConfig
 			//process write request
 			else if(type.matches("W")){
-				TFTPclientWRQ w = new TFTPclientWRQ(server, fileName, mode, cc);
+				TFTPclientWRQ w = new TFTPclientWRQ(server, fileName, mode, cc); // PA2: pass in CryptoConfig
 			}
 			else{throw new UseException("wrong command. \n--Usage-- \nocter mode:  TFTPClient [host] [Type(R/W?)] [filename] \nother mode:  TFTPClient [host] [Type(R/W?)] [filename] [mode]");}
 			
