@@ -13,16 +13,16 @@ import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 
 public class CryptoConfig implements Serializable {
-    private String confidentiality; // ALG/MODE/PADDING
-    private String symmetricKey;    // in hex
-    private int symmetricKeySize;   // in bits
-    private Integer IVSize;         // int or NULL
-    private String IV;              // hex or NULL
-    private String integrity;       // HMAC or H
-    private String hashFunction;    // secure hash func or NULL
-    private String MAC;             // HMAC or CMAC
-    private String MACKey;          // in hex or NULL
-    private Integer MACKeySize;     // in bits
+    private String confidentiality;     // ALG/MODE/PADDING
+    private String symmetricKey = null; // in hex
+    private int symmetricKeySize;       // in bits
+    private Integer IVSize;             // int or NULL
+    private String IV = null;           // hex or NULL
+    private String integrity;           // HMAC or H
+    private String hashFunction;        // secure hash func or NULL
+    private String MAC;                 // HMAC or CMAC
+    private String MACKey = null;       // in hex or NULL
+    private Integer MACKeySize;         // in bits
 
     // default config name
     public CryptoConfig() { this("cryptoconfig.txt"); }
@@ -43,9 +43,9 @@ public class CryptoConfig implements Serializable {
                 case "CONFIDENTIALITY":
                     this.confidentiality = value;
                     break;
-                case "SYMMETRIC_KEY":
-                    this.symmetricKey = value;
-                    break;
+                // case "SYMMETRIC_KEY":
+                //     this.symmetricKey = value;
+                //     break;
                 case "SYMMETRIC_KEY_SIZE":
                     this.symmetricKeySize = Integer.parseInt(value);
                     break;
@@ -53,9 +53,9 @@ public class CryptoConfig implements Serializable {
                     this.IVSize =
                         value.equals("NULL") ? 0 : Integer.parseInt(value);
                     break;
-                case "IV":
-                    this.IV = value.equals("NULL") ? null : value;
-                    break;
+                // case "IV":
+                //     this.IV = value.equals("NULL") ? null : value;
+                //     break;
                 case "INTEGRITY":
                     this.integrity = value;
                     break;
@@ -65,9 +65,9 @@ public class CryptoConfig implements Serializable {
                 case "MAC":
                     this.MAC = value;
                     break;
-                case "MACKEY":
-                    this.MACKey = value.equals("NULL") ? null : value;
-                    break;
+                // case "MACKEY":
+                //     this.MACKey = value.equals("NULL") ? null : value;
+                //     break;
                 case "MACKEY_SIZE":
                     this.MACKeySize =
                         value.equals("NULL") ? 0 : Integer.parseInt(value);

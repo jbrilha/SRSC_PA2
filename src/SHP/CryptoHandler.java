@@ -1,15 +1,8 @@
 package SHP;
 
-import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
-import java.io.FileReader;
-import java.io.IOException;
-import java.io.Serializable;
 import java.math.BigInteger;
-import java.security.AlgorithmParameterGenerator;
-import java.security.AlgorithmParameters;
 import java.security.InvalidAlgorithmParameterException;
-import java.security.InvalidKeyException;
 import java.security.Key;
 import java.security.KeyFactory;
 import java.security.KeyPair;
@@ -23,18 +16,14 @@ import java.security.SecureRandom;
 import java.security.Security;
 import java.security.Signature;
 import java.security.spec.InvalidKeySpecException;
-import java.security.spec.InvalidParameterSpecException;
 import java.security.spec.PKCS8EncodedKeySpec;
 import java.security.spec.X509EncodedKeySpec;
-import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
-import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.KeyAgreement;
 import javax.crypto.Mac;
 import javax.crypto.NoSuchPaddingException;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.DHParameterSpec;
-import javax.crypto.spec.DHPublicKeySpec;
 import javax.crypto.spec.PBEKeySpec;
 import javax.crypto.spec.PBEParameterSpec;
 import javax.crypto.spec.SecretKeySpec;
@@ -45,11 +34,14 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider;
  */
 public class CryptoHandler {
     private final static String HMAC = "HMAC-SHA512";
+    private final static String AES_CTR_NOPADDING = "AES/CTR/NoPadding";
+
     private MessageDigest hash;
     private Mac mac;
     private Signature signature;
     private Cipher pwCipher;
     private Cipher envCipher;
+    private Cipher aesCipher;
     private SecretKeyFactory secKeyFactory;
     private KeyFactory ECKeyFactory;
     private KeyFactory DHKeyFactory;
@@ -85,7 +77,6 @@ public class CryptoHandler {
         Security.addProvider(new BouncyCastleProvider());
 
         try {
-
             this.ECKeyFactory = KeyFactory.getInstance("EC", "BC");
             this.DHKeyFactory = KeyFactory.getInstance("DH", "BC");
             this.hash = MessageDigest.getInstance("SHA256", "BC");
@@ -93,6 +84,7 @@ public class CryptoHandler {
             this.signature = Signature.getInstance("SHA256withECDSA", "BC");
             this.pwCipher = Cipher.getInstance("PBEWITHSHA256AND192BITAES-CBC-BC", "BC");
             this.envCipher = Cipher.getInstance("ECIES", "BC");
+            this.aesCipher = Cipher.getInstance(AES_CTR_NOPADDING, "BC");
             this.secKeyFactory = SecretKeyFactory.getInstance(
                     "PBEWITHSHA256AND192BITAES-CBC-BC", "BC");
             this.keyAgreement = KeyAgreement.getInstance("DH", "BC");
@@ -111,6 +103,12 @@ public class CryptoHandler {
         }
     }
 
+    // PublicKey parsing
+    public PublicKey parseDHPublicKeyBytes(byte[] bytes)
+            throws InvalidKeySpecException {
+        return parsePublicKeyBytes(DHKeyFactory, bytes);
+    }
+
     public PublicKey parseECPublicKeyHex(String hex)
             throws InvalidKeySpecException {
 
@@ -125,11 +123,7 @@ public class CryptoHandler {
         return keyFactory.generatePublic(keySpec);
     }
 
-    public PublicKey parseDHPublicKeyBytes(byte[] bytes)
-            throws InvalidKeySpecException {
-        return parsePublicKeyBytes(DHKeyFactory, bytes);
-    }
-
+    // PrivateKey parsing
     public PrivateKey parseECPrivateKeyHex(String hex)
             throws InvalidKeySpecException {
 
@@ -150,26 +144,28 @@ public class CryptoHandler {
         return keyFactory.generatePrivate(keySpec);
     }
 
-    public byte[] encryptConfirmation(SHPEncryptedConfirmation confirmation,
-            PublicKey pubKey) throws Exception {
-        envCipher.init(Cipher.ENCRYPT_MODE, pubKey);
-        return envCipher.doFinal(confirmation.serialize());
-    }
-
-    public SHPEncryptedConfirmation decryptConfirmation(byte[] confirmation,
-            PrivateKey privKey)
+    // Encryption
+    public byte[] performSymetricEncryption(byte[] data, byte[] secret)
             throws Exception {
-        envCipher.init(Cipher.DECRYPT_MODE, privKey);
-        return SHPEncryptedConfirmation.deserialize(
-                envCipher.doFinal(confirmation));
+        SecretKeySpec key = new SecretKeySpec(secret, AES_CTR_NOPADDING);
+        System.out.println("sec: " + Utils.bytesToHex(secret) + " | size: " + secret.length);
+        aesCipher.init(Cipher.ENCRYPT_MODE, key);
+        return aesCipher.doFinal(data);
     }
 
-    public byte[] encryptRequest(SHPEncryptedRequest request, byte[] password,
-            byte[] salt, byte[] counter) throws Exception {
-        System.out.println("client pw: " + Utils.bytesToHex(password));
+    public byte[] performAssymetricEncryption(byte[] data, PublicKey pubKey)
+            throws Exception {
+        envCipher.init(Cipher.ENCRYPT_MODE, pubKey);
+        return envCipher.doFinal(data);
+    }
+
+    public byte[] performPasswordEncryption(byte[] data, byte[] password,
+            byte[] salt, byte[] counter)
+            throws Exception {
         String pwHex = Utils.bytesToHex(password);
         PBEKeySpec pwSpec = new PBEKeySpec(pwHex.toCharArray());
         Key sKey = secKeyFactory.generateSecret(pwSpec);
+
         String counterStr = Utils.bytesToHex(counter);
         BigInteger counterBigInt = new BigInteger(counterStr, 16);
         int counterInt = Math.max(counterBigInt.intValue() & 0xFFFF, 8192);
@@ -179,16 +175,30 @@ public class CryptoHandler {
         pwCipher.init(Cipher.ENCRYPT_MODE, sKey,
                 new PBEParameterSpec(salt, counterInt));
 
-        return pwCipher.doFinal(request.serialize());
+        return pwCipher.doFinal(data);
     }
 
-    public SHPEncryptedRequest decryptRequest(byte[] request, byte[] password,
+    // Decryption
+    public byte[] performSymetricDecryption(byte[] data, byte[] secret)
+            throws Exception {
+        SecretKeySpec key = new SecretKeySpec(secret, AES_CTR_NOPADDING);
+        aesCipher.init(Cipher.DECRYPT_MODE, key);
+        return aesCipher.doFinal(data);
+    }
+
+    public byte[] performAssymetricDecryption(byte[] data, PrivateKey key)
+            throws Exception {
+        envCipher.init(Cipher.DECRYPT_MODE, key);
+        return envCipher.doFinal(data);
+    }
+
+    public byte[] performPasswordDecryption(byte[] data, byte[] password,
             byte[] salt, byte[] counter)
             throws Exception {
-        System.out.println("server pw: " + Utils.bytesToHex(password));
         String pwHex = Utils.bytesToHex(password);
         PBEKeySpec pwSpec = new PBEKeySpec(pwHex.toCharArray());
         Key sKey = secKeyFactory.generateSecret(pwSpec);
+
         String counterStr = Utils.bytesToHex(counter);
         BigInteger counterBigInt = new BigInteger(counterStr, 16);
         int counterInt = Math.max(counterBigInt.intValue() & 0xFFFF, 8192);
@@ -197,27 +207,10 @@ public class CryptoHandler {
         pwCipher.init(Cipher.DECRYPT_MODE, sKey,
                 new PBEParameterSpec(salt, counterInt));
 
-        return SHPEncryptedRequest.deserialize(pwCipher.doFinal(request));
+        return pwCipher.doFinal(data);
     }
 
-    public byte[] signRequest(SHPSignedRequest request, PrivateKey privKey)
-            throws Exception {
-
-        signature.initSign(privKey, new SecureRandom());
-        byte[] req = request.serialize();
-        signature.update(req);
-        return signature.sign();
-    }
-
-    public byte[] signConfirmation(SHPSignedConfirmation confirmation,
-            PrivateKey privKey) throws Exception {
-
-        signature.initSign(privKey, new SecureRandom());
-        byte[] conf = confirmation.serialize();
-        signature.update(conf);
-        return signature.sign();
-    }
-
+    // DH key gen
     public byte[] generateDHPubKey() throws Exception {
         KeyPair keyPair = keyPairGenerator.generateKeyPair();
         this.dhPrivKey = keyPair.getPrivate();
@@ -231,76 +224,25 @@ public class CryptoHandler {
         return keyAgreement.generateSecret();
     }
 
-    public byte[] authenticate(byte[] pwHash, byte[] enc, byte[] ydh,
-            byte[] sig) throws Exception {
-
-        Key key = new SecretKeySpec(pwHash, HMAC);
-        mac.init(key);
+    // Other sec property generators
+    public byte[] generateMAC(byte[] key, byte[]... data) throws Exception {
+        Key sKey = new SecretKeySpec(key, HMAC);
+        mac.init(sKey);
 
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        baos.write(enc);
-        baos.write(ydh);
-        baos.write(sig);
+        for (byte[] arr : data) {
+            baos.write(arr);
+        }
         mac.update(baos.toByteArray());
 
         return mac.doFinal();
     }
 
-    public byte[] authenticateGreenlight(byte[] secretKey, byte[] gl)
+    public byte[] generateSignature(PrivateKey key, byte[] data)
             throws Exception {
-
-        Key key = new SecretKeySpec(secretKey, HMAC);
-        mac.init(key);
-
-        mac.update(gl);
-
-        return mac.doFinal();
-    }
-
-    public boolean validateGreenlight(byte[] secretKey, byte[] gl,
-            byte[] authCode) throws Exception {
-
-        Key key = new SecretKeySpec(secretKey, HMAC);
-        mac.init(key);
-        mac.update(gl);
-
-        return MessageDigest.isEqual(authCode, mac.doFinal());
-    }
-
-    public boolean validateAuth(byte[] pwHash, byte[] pbe, byte[] ydhClient,
-            byte[] sig, byte[] authCode) throws Exception {
-
-        Key key = new SecretKeySpec(pwHash, HMAC);
-        mac.init(key);
-        ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        baos.write(pbe);
-        baos.write(ydhClient);
-        baos.write(sig);
-        byte[] data = baos.toByteArray();
-        mac.update(data);
-
-        return MessageDigest.isEqual(authCode, mac.doFinal());
-    }
-
-    public boolean validateSignature(SHPSignedRequest request, byte[] sig,
-            PublicKey pubKey) throws Exception {
-
-        signature.initVerify(pubKey);
-        signature.update(request.serialize());
-        return signature.verify(sig);
-    }
-
-    public boolean validateSignature(SHPSignedConfirmation confirmation,
-            byte[] sig, PublicKey pubKey)
-            throws Exception {
-
-        signature.initVerify(pubKey);
-        signature.update(confirmation.serialize());
-        return signature.verify(sig);
-    }
-
-    public boolean validatePassword(byte[] received, byte[] expected) {
-        return MessageDigest.isEqual(received, expected);
+        signature.initSign(key, new SecureRandom());
+        signature.update(data);
+        return signature.sign();
     }
 
     public byte[] hashPassword(String password) {
@@ -315,5 +257,32 @@ public class CryptoHandler {
         r.nextBytes(nonces);
 
         return nonces;
+    }
+
+    // Other sec property validators
+    public boolean validateMAC(byte[] key, byte[] expected, byte[]... data)
+            throws Exception {
+        Key sKey = new SecretKeySpec(key, HMAC);
+        mac.init(sKey);
+
+        ByteArrayOutputStream baos = new ByteArrayOutputStream();
+        for (byte[] arr : data) {
+            baos.write(arr);
+        }
+        mac.update(baos.toByteArray());
+
+        return MessageDigest.isEqual(expected, mac.doFinal());
+    }
+
+    public boolean validateSignature(PublicKey key, byte[] sig, byte[] expected)
+            throws Exception {
+
+        signature.initVerify(key);
+        signature.update(expected);
+        return signature.verify(sig);
+    }
+
+    public boolean validatePassword(byte[] received, byte[] expected) {
+        return MessageDigest.isEqual(received, expected);
     }
 }
