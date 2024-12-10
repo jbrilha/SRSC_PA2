@@ -20,8 +20,8 @@
 - Note: changes made to the DSTPSocket classes are not recompiled unless the .class files are deleted so that's why I left these ones as "recompilers" and not just runners
 ### TFTP Client and Server are now dockerized!
 * docker-compose.TFTP.yml (located in src/TFTP-master) runs the server continuously and spawns a client container to request a file
-* The client commands can be swapped in the docker-compose.TFTP.yml file and the client alone can be ran again with: 
-'''docker compose -f docker-compose.TFTP.yml up --build client'''
+* The client commands can be swapped in the docker-compose.TFTP.yml file and a new client can be deployed with: 
+```docker compose -f docker-compose.TFTP.yml up --build client```
 to have it download a different file from the same server that was already up.
 
 ## Example ciphersuites
