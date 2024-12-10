@@ -10,6 +10,6 @@ COPY src/userdatabase.txt src/
 COPY src/ServerECCKeyPair.sec src/
 
 WORKDIR /app/src
-RUN javac -cp .:../libs/bcprov-jdk18on-1.78.1.jar DSTP/*.java StreamingService/**/*.java
+RUN javac -cp .:../libs/bcprov-jdk18on-1.78.1.jar DSTP/*.java SHP/*.java StreamingService/**/*.java
 
 ENTRYPOINT ["java", "-cp", ".:../libs/bcprov-jdk18on-1.78.1.jar", "StreamingService.hjStreamServer.hjStreamServer"]

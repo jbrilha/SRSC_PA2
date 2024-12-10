@@ -6,7 +6,7 @@ password="${2:-password1}"
 host="${3:-localhost}"
 tcp_port="${4:-3333}"
 
-movie="${5:-monsters.dat}"
+movie="${5:-cars.dat}"
 
 server_port="${6:-10000}"
 player_port="${7:-9000}"
