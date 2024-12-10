@@ -1,0 +1,17 @@
+services:
+  client:
+    build:
+      context: .
+      dockerfile: TFTPClient/Dockerfile.TFTPClient
+    network_mode: "host"
+    depends_on:
+      - server
+    command: ["user1@email.com", "password1", "localhost", "5000", "R", "server2.pdf"]
+    # command: ["user1@email.com", "password1", "localhost", "5000", "R", "server1.jpg"]
+
+  server:
+    build:
+      context: .
+      dockerfile: TFTPServer/Dockerfile.TFTPServer
+    network_mode: "host"
+    command: ["5000"]

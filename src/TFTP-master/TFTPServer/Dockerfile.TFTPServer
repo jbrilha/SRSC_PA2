@@ -1,0 +1,11 @@
+FROM openjdk:18-slim
+
+WORKDIR /app
+COPY TFTPServer/libs/bcprov-jdk18on-1.78.1.jar libs/
+COPY TFTPServer/src/ src/
+COPY TFTPServer/server2.pdf ./
+COPY TFTPServer/server1.jpg ./
+
+WORKDIR /app/src
+RUN find . -name '*.class' -delete && javac -cp .:../libs/bcprov-jdk18on-1.78.1.jar DSTP/*.java SHP/*.java *.java
+ENTRYPOINT ["java", "-cp", ".:../libs/bcprov-jdk18on-1.78.1.jar", "TFTPServer"]
