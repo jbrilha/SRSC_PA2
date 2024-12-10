@@ -3,11 +3,12 @@ FROM openjdk:18-slim
 WORKDIR /app
 COPY libs/bcprov-jdk18on-1.78.1.jar libs/
 COPY src/DSTP/ src/DSTP/
+COPY src/SHP/ src/SHP/
 COPY src/StreamingService/ src/StreamingService/
-COPY src/cryptoconfig.txt src/
+COPY src/ClientECCKeyPair.sec src/
+COPY src/ServerECCPubKey.sec src/
 
 WORKDIR /app/src
 RUN javac -cp .:../libs/bcprov-jdk18on-1.78.1.jar DSTP/*.java StreamingService/**/*.java
 
 ENTRYPOINT ["java", "-cp", ".:../libs/bcprov-jdk18on-1.78.1.jar", "StreamingService.hjUDPproxy.hjUDPproxy"]
-CMD ["172.50.0.1:5000", "173.50.0.3:5000"]
