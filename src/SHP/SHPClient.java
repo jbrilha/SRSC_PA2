@@ -212,7 +212,7 @@ public class SHPClient {
     }
 
     private PublicKey parseServerKey() {
-        try (BufferedReader reader = new BufferedReader(new FileReader("ServerECCPubKey.txt"))) {
+        try (BufferedReader reader = new BufferedReader(new FileReader("ServerECCPubKey.sec"))) {
             String curve = reader.readLine().split(":")[1].trim();
 
             String pubKeyHex = reader.readLine().split(":")[1].trim();

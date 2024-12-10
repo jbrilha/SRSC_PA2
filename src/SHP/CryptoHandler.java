@@ -149,8 +149,6 @@ public class CryptoHandler {
     public byte[] performSymetricEncryption(byte[] data, byte[] secret)
             throws Exception {
         SecretKeySpec key = new SecretKeySpec(secret, AES);
-        System.out.println("sec: " + Utils.bytesToHex(secret) +
-                " | size: " + secret.length);
         aesCipher.init(Cipher.ENCRYPT_MODE, key);
         return aesCipher.doFinal(data);
     }
