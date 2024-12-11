@@ -14,20 +14,22 @@
     * docker-compose.stream.yml — starts the stream in one container, the proxy in another, and allows for VLC to listen on udp://@:9000
     
 ## Testing TFTP
-- To facilitate testing TFTP, there are two helper scripts:
+- To facilitate testing TFTP, there are two helper scripts found in the src/ directories of TFTPServer and TFTPClient directories, respectively:
     * server.sh — Recompiles and starts the TFTP Server service
     * client.sh — Recompiles and starts the TFTP Client service, defaults to a (R)ead operation on localhost for the file "server1.jpg", but accepts same arguments as TFTPClient
-- Note: changes made to the DSTPSocket classes are not recompiled unless the .class files are deleted so that's why I left these ones as "recompilers" and not just runners
+- Note: changes made to the SHP and DSTPSocket classes are not recompiled unless the .class files are deleted so that's why I left these scripts as "recompilers" and not just runners
 ### TFTP Client and Server are now dockerized!
 * docker-compose.TFTP.yml (located in src/TFTP-master) runs the server continuously and spawns a client container to request a file
 * The client commands can be swapped in the docker-compose.TFTP.yml file and a new client can be deployed with:
 
-```docker compose -f docker-compose.TFTP.yml up --build client```
+```shell
+docker compose -f docker-compose.TFTP.yml up --build client
+```
 
    to have it download a different file from the same server that was already up.
 
 ## Example ciphersuites
-- Same configs from PA1 are now in the ciphersuites directory with the keys removed, as they are now derived from the Diffie-Hellman agreement generated secret
+- The same configs from PA1 are now in the ciphersuites directory with the keys removed, as they are now derived from the Diffie-Hellman agreement generated secret
 - To test each one, copy them to the src directory of whichever service is being tested, and name them "ciphersuite.conf"
 
 ## Additional notes
@@ -35,4 +37,5 @@
 - Same applies for the ciphersuite.conf and the libs directory which just contains the bouncycastle jar
 - Request confirmation (aka checking if a file exists) is hardcoded in the SHP servers, so for testing other files the validateRequest method would need to be changed
 - TFTP still only works one way (client reads from server, but can't write to it) but that is unrelated to the SHP handshake so I will not lose (more) sleep over it, sorry!
+- TFTP also has the same incompatibilities with Galois based ciphers as it had PA1 given that the DSTP implementation remains mostly the same.
 - The project spec says not to pass arguments to the streamServer so it defaults to using port 3333 for the SHP handshake, but just in case this was an oversight it still accepts one argument that would be the desired port
