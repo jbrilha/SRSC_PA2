@@ -8,7 +8,7 @@
 ## Testing streaming
 - To facilitate testing these services, there are a few helper scripts:
     * compile.sh — Due to the directory structure of TFTP-master, this _*only*_ compiles the Java files inside StreamingService, as well as the DSTP and SHP classes
-    * proxy.sh — Starts the Proxy service, defaults to having SHP handshake on TCP port 3333 (default in the SHPServer as the assignment spec said not to pass arguments to the streamServer) for user1@email.com with password1 on localhost, requesting movie cars.dat and passing communication between port 10000 and port 9000; accepts the same arguments as hjUDPproxy.java
+    * proxy.sh — Starts the Proxy service, defaults to starting SHP handshake on TCP port 3333, for user1@email.com with password1 on localhost, requesting movie cars.dat and passing communication between port 10000 and port 9000; accepts the same arguments as hjUDPproxy.java
     * streamServer.sh — Starts the StreamServer service
 - There is also a docker-compose files, which grabs whatever ciphersuite.conf file that is inside of src:
     * docker-compose.stream.yml — starts the stream in one container, the proxy in another, and allows for VLC to listen on udp://@:9000
@@ -35,3 +35,4 @@
 - Same applies for the ciphersuite.conf and the libs directory which just contains the bouncycastle jar
 - Request confirmation (aka checking if a file exists) is hardcoded in the SHP servers, so for testing other files the validateRequest method would need to be changed
 - TFTP still only works one way (client reads from server, but can't write to it) but that is unrelated to the SHP handshake so I will not lose (more) sleep over it, sorry!
+- The project spec says not to pass arguments to the streamServer so it defaults to using port 3333 for the SHP handshake, but just in case this was an oversight it still accepts one argument that would be the desired port

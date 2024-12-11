@@ -16,7 +16,9 @@ import SHP.*; // PA2: added import
 class hjStreamServer {
 
 	static public void main( String []args ) throws Exception { // PA2: remove argument count checking
-        SHPServer sc = new SHPServer(); // PA2: init SHP server
+        // PA2: just in case this is actually needed but not in the spec....
+        int tcp_port = (args.length == 0 || args[0] == null) ? 3333 : Integer.parseInt(args[0]);
+        SHPServer sc = new SHPServer(tcp_port); // PA2: init SHP server
         SHPRequest request = sc.handshake(); // PA2: SHP handshake
         String filename =
             "StreamingService/hjStreamServer/movies/" + request.body;
